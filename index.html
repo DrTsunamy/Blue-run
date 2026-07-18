@@ -1395,6 +1395,8 @@ document.addEventListener('keydown',e=>{
   if((e.code==='ArrowRight'||e.code==='KeyD')&&S.tgtLane<2){S.tgtLane++;SFX.swish();}
   if(e.code==='Space'&&player.userData.grounded&&!S.charging){S.charging=true;document.getElementById('charge-wrap').classList.add('show');}
   if((e.code==='ArrowDown'||e.code==='KeyS')&&!player.userData.grounded){player.userData.vy=Math.min(player.userData.vy,-30);S.fastFall=true;}
+  // DEV: skip ahead to test later levels (Shift+K)
+  if(e.code==='KeyK'&&e.shiftKey){S.dist+=250;}
 });
 document.addEventListener('keyup',e=>{
   keys[e.code]=false;
@@ -1651,9 +1653,11 @@ function loop(now){
     // Negative Y targets are cascade drops — the track ahead dives away.
     S.curveTimer-=dt;
     if(S.curveTimer<=0){
-      S.curveTimer=5+Math.random()*5;
-      S.curveTgtX=(Math.random()-0.5)*1.5;
-      S.curveTgtY=Math.random()<0.35?-(0.4+Math.random()*0.8):(Math.random()-0.5)*0.7;
+      S.curveTimer=3.5+Math.random()*3.5;
+      // Alternate direction more often than not so the canyon reads as S-curves
+      const cDir=(S.curveTgtX>=0?-1:1)*(Math.random()<0.75?1:-1);
+      S.curveTgtX=cDir*(1.6+Math.random()*1.8);
+      S.curveTgtY=Math.random()<0.35?-(0.5+Math.random()*0.9):(Math.random()-0.5)*0.8;
     }
     // Invincibility
     if(S.invincible){
@@ -1928,8 +1932,8 @@ function loop(now){
   // ─── AMBIENT (always) ───
   // Ease the world bend toward its target (returns to straight outside runs)
   const curveOn=S.on&&!S.paused;
-  CURVE.x.value+=((curveOn?S.curveTgtX:0)-CURVE.x.value)*0.012;
-  CURVE.y.value+=((curveOn?S.curveTgtY:0)-CURVE.y.value)*0.012;
+  CURVE.x.value+=((curveOn?S.curveTgtX:0)-CURVE.x.value)*0.02;
+  CURVE.y.value+=((curveOn?S.curveTgtY:0)-CURVE.y.value)*0.02;
   // Sand cascades pour continuously (one shared texture scroll)
   sandfallTex.offset.y-=dt*0.55;
   // Underwater lens shader time
