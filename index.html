@@ -94,6 +94,14 @@
     #magnet-badge.show { opacity:1; animation:shieldPulse 1s ease-in-out infinite alternate; }
     #x2-badge { top:214px; right:18px; background:linear-gradient(180deg,#ffe040,#e8a000 50%,#b07000); border-color:#fff; font-size:14px; padding:5px 14px; opacity:0; transition:opacity .3s; }
     #x2-badge.show { opacity:1; animation:shieldPulse 1s ease-in-out infinite alternate; }
+    #dash-badge { top:280px; right:18px; background:linear-gradient(180deg,#ffa030,#e06010 50%,#a04000); border-color:#fff; font-size:14px; padding:5px 14px; opacity:0; transition:opacity .3s; }
+    #dash-badge.show { opacity:1; animation:shieldPulse 1s ease-in-out infinite alternate; }
+    #slow-badge { top:346px; right:18px; background:linear-gradient(180deg,#b070ff,#7030d0 50%,#4a1898); border-color:#fff; font-size:14px; padding:5px 14px; opacity:0; transition:opacity .3s; }
+    #slow-badge.show { opacity:1; animation:shieldPulse 1s ease-in-out infinite alternate; }
+    #tiny-badge { top:412px; right:18px; background:linear-gradient(180deg,#ff70b8,#d03080 50%,#981858); border-color:#fff; font-size:14px; padding:5px 14px; opacity:0; transition:opacity .3s; }
+    #tiny-badge.show { opacity:1; animation:shieldPulse 1s ease-in-out infinite alternate; }
+    #ink-overlay { position:absolute; top:0; left:0; width:100%; height:100%; pointer-events:none; z-index:57; opacity:0; transition:opacity 0.25s;
+      background:radial-gradient(ellipse at 50% 45%, rgba(5,8,12,0.55) 0%, rgba(2,4,8,0.97) 62%, #000 100%); }
     #best-inline { font-size:11px; color:rgba(255,255,255,0.7); letter-spacing:2px; line-height:1.4; }
 
     /* Pause */
@@ -178,6 +186,7 @@
   <div id="caustics"></div>
   <div id="vignette"></div>
   <div id="screen-flash"></div>
+  <div id="ink-overlay"></div>
   <div id="invincible-overlay"></div>
   <div id="ui">
     <div id="lives-badge" class="hud-badge">
@@ -191,6 +200,9 @@
     <div id="shield-badge" class="hud-badge">🛡 SHIELD</div>
     <div id="magnet-badge" class="hud-badge">🧲 MAGNET</div>
     <div id="x2-badge" class="hud-badge">✨ 2X SCORE</div>
+    <div id="dash-badge" class="hud-badge">💨 DASH</div>
+    <div id="slow-badge" class="hud-badge">⏳ SLOW-MO</div>
+    <div id="tiny-badge" class="hud-badge">🧪 TINY</div>
     <div id="speed-icon">⚡</div>
     <div id="speed-wrap"><div id="speed-fill"></div></div>
     <div id="charge-wrap"><div id="charge-fill"></div></div>
@@ -310,6 +322,20 @@ const SFX = (() => {
     gold(){ [0,0.06,0.13].forEach((d,i)=>osc('triangle',[760,960,1160][i],null,0.22,0.1,d)); },
     hit(){ noise(0.25, 0.25, 180); osc('sine', 140, 60, 0.2, 0.08); },
     boost(){ osc('sawtooth', 90, 560, 0.45, 0.09); },
+    dash(){ osc('sawtooth', 200, 900, 0.3, 0.1); noise(0.2, 0.1, 900); },
+    timeSlow(){ osc('sine', 800, 200, 0.5, 0.09); },
+    shrink(){ osc('sine', 400, 1200, 0.25, 0.08); },
+    inkHit(){ noise(0.35, 0.25, 150); osc('sine', 220, 70, 0.3, 0.06); },
+    stalactite(){ noise(0.3, 0.2, 300); osc('square', 90, 45, 0.25, 0.07); },
+    crabSnap(){ osc('square', 320, 90, 0.09, 0.12); noise(0.06, 0.12, 1400); },
+    torpedoWarn(){ osc('square', 1200, 900, 0.1, 0.07); osc('square', 1200, 900, 0.1, 0.07, 0.15); },
+    eelCharge(){ osc('sawtooth', 80, 400, 1.4, 0.05); },
+    eelZap(){ noise(0.4, 0.3, 2400); osc('square', 1800, 300, 0.35, 0.09); },
+    krakenRoar(){ noise(1.2, 0.4, 90); osc('sawtooth', 55, 28, 1.1, 0.16); osc('sawtooth', 82, 40, 0.9, 0.1, 0.1); },
+    tentacleWarn(){ osc('sine', 180, 120, 0.35, 0.1); osc('sine', 180, 120, 0.35, 0.1, 0.45); },
+    tentacleSlam(){ noise(0.4, 0.35, 120); osc('sine', 70, 30, 0.35, 0.14); },
+    inkShot(){ osc('sine', 300, 90, 0.3, 0.1); noise(0.15, 0.12, 400); },
+    shockwave(){ osc('sawtooth', 45, 130, 0.7, 0.13); noise(0.5, 0.15, 200); },
     levelUp(){ [0,0.12,0.24,0.38].forEach((d,i)=>osc('square',[420,530,640,850][i],null,0.28,0.07,d)); },
     shield(){ osc('sine', 660, 880, 0.15, 0.06); },
     death(){ noise(0.4, 0.35, 220); osc('sawtooth',180,40,0.4,0.12); },
@@ -407,6 +433,7 @@ const C = {
   segLen: 35, segCount: 14,
   obFreq: 0.38, pearlFreq: 0.42, goldFreq: 0.10, shieldFreq: 0.06,
   magnetFreq: 0.05, x2Freq: 0.045,
+  dashFreq: 0.04, timeSlowFreq: 0.035, decoyFreq: 0.03, shrinkFreq: 0.03,
   hitRadius: 0.95, collectRadius: 1.3,
   levels: [
     { name:"CALM REEFS",      dist:0,    skyT:0xffeecc,skyM:0x30b8c8,skyB:0x0c4868, fog:0x0f6478,fogD:0.014, amb:0x88c8d8,sun:0xffffd0,sunI:1.4, wallColor:0x5a7868 },
@@ -427,6 +454,7 @@ function resetState() {
     lives:3, invincible:false, invincibleT:0, shieldActive:false, shieldT:0,
     paused:false, ts:1, slowmoT:0,
     magnetT:0, x2:false, x2T:0,
+    dashT:0, timeSlowT:0, decoy:false, shrinkT:0, sizeF:1, inkedT:0,
     nearMisses:0, nextMilestone:500, best:0, bestShown:false,
     revived:false, fastFall:false, wakeT:0,
     curveTimer:2, curveTgtX:0, curveTgtY:0,
@@ -714,6 +742,12 @@ function buildWarplet(){
 const player = buildWarplet();
 player.position.set(0,2,0);
 scene.add(player);
+
+// Decoy fish: a mini Warplet that orbits the player and absorbs one hit
+const decoyFish = buildWarplet();
+decoyFish.scale.setScalar(0.4);
+decoyFish.visible = false;
+scene.add(decoyFish);
 
 // ─── POOLS ───
 const segs=[], obs=[], cols=[], godRays=[], bubbles=[], fishArr=[], trail=[], plankton=[], ambJellies=[], decos=[];
@@ -1345,6 +1379,56 @@ function makeX2Pickup(seg){
   g.userData={kind:'x2',got:false,baseY:2.0,phase:Math.random()*Math.PI*2};
   scene.add(g); cols.push(g);
 }
+function makeDashPickup(seg){
+  const lane=Math.floor(Math.random()*3);
+  const g=new THREE.Group();
+  const aMat=new THREE.MeshStandardMaterial({color:0xffa030,roughness:0.15,metalness:0.7,emissive:0xe06010,emissiveIntensity:0.7});
+  // Double chevron arrow
+  for(let i=0;i<2;i++){
+    const ar=new THREE.Mesh(new THREE.ConeGeometry(0.22,0.34,4),aMat);
+    ar.rotation.x=-Math.PI/2; ar.position.z=-0.12-i*0.3; g.add(ar);
+  }
+  g.add(new THREE.Mesh(new THREE.TorusGeometry(0.45,0.035,6,20),new THREE.MeshBasicMaterial({color:0xffc060,transparent:true,opacity:0.45})));
+  g.position.set(C.lanes[lane],2.0,seg.position.z+(Math.random()-0.5)*C.segLen*0.4);
+  g.userData={kind:'dash',got:false,baseY:2.0,phase:Math.random()*Math.PI*2};
+  scene.add(g); cols.push(g);
+}
+function makeTimeSlowPickup(seg){
+  const lane=Math.floor(Math.random()*3);
+  const g=new THREE.Group();
+  const hMat=new THREE.MeshStandardMaterial({color:0xb070ff,roughness:0.1,metalness:0.6,emissive:0x7030d0,emissiveIntensity:0.7,transparent:true,opacity:0.9});
+  // Hourglass: two cones tip-to-tip
+  const hTop=new THREE.Mesh(new THREE.ConeGeometry(0.22,0.3,8),hMat); hTop.rotation.x=Math.PI; hTop.position.y=0.15; g.add(hTop);
+  const hBot=new THREE.Mesh(new THREE.ConeGeometry(0.22,0.3,8),hMat); hBot.position.y=-0.15; g.add(hBot);
+  g.add(new THREE.Mesh(new THREE.TorusGeometry(0.45,0.035,6,20),new THREE.MeshBasicMaterial({color:0xc898ff,transparent:true,opacity:0.45})));
+  g.position.set(C.lanes[lane],2.0,seg.position.z+(Math.random()-0.5)*C.segLen*0.4);
+  g.userData={kind:'timeSlow',got:false,baseY:2.0,phase:Math.random()*Math.PI*2};
+  scene.add(g); cols.push(g);
+}
+function makeDecoyPickup(seg){
+  const lane=Math.floor(Math.random()*3);
+  const g=new THREE.Group();
+  const fMat=new THREE.MeshStandardMaterial({color:0x40e0ff,roughness:0.2,metalness:0.4,emissive:0x00a0d0,emissiveIntensity:0.8});
+  const dBody=new THREE.Mesh(new THREE.SphereGeometry(0.24,12,10),fMat); dBody.scale.set(0.9,0.8,1.3); g.add(dBody);
+  const dTail=new THREE.Mesh(new THREE.ConeGeometry(0.14,0.3,5),fMat); dTail.position.z=0.38; dTail.rotation.x=-Math.PI/2; g.add(dTail);
+  g.add(new THREE.Mesh(new THREE.TorusGeometry(0.45,0.035,6,20),new THREE.MeshBasicMaterial({color:0x80f0ff,transparent:true,opacity:0.45})));
+  g.position.set(C.lanes[lane],2.0,seg.position.z+(Math.random()-0.5)*C.segLen*0.4);
+  g.userData={kind:'decoy',got:false,baseY:2.0,phase:Math.random()*Math.PI*2};
+  scene.add(g); cols.push(g);
+}
+function makeShrinkPickup(seg){
+  const lane=Math.floor(Math.random()*3);
+  const g=new THREE.Group();
+  const pMat=new THREE.MeshStandardMaterial({color:0xff70b8,roughness:0.1,metalness:0.3,emissive:0xd03080,emissiveIntensity:0.7,transparent:true,opacity:0.9});
+  // Potion bottle: sphere body + cylinder neck + cork
+  const pBody=new THREE.Mesh(new THREE.SphereGeometry(0.22,12,10),pMat); g.add(pBody);
+  const pNeck=new THREE.Mesh(new THREE.CylinderGeometry(0.07,0.09,0.16,8),pMat); pNeck.position.y=0.24; g.add(pNeck);
+  const pCork=new THREE.Mesh(new THREE.CylinderGeometry(0.08,0.08,0.07,8),new THREE.MeshStandardMaterial({color:0xb08048,roughness:0.9})); pCork.position.y=0.35; g.add(pCork);
+  g.add(new THREE.Mesh(new THREE.TorusGeometry(0.45,0.035,6,20),new THREE.MeshBasicMaterial({color:0xff98d0,transparent:true,opacity:0.45})));
+  g.position.set(C.lanes[lane],2.0,seg.position.z+(Math.random()-0.5)*C.segLen*0.4);
+  g.userData={kind:'shrink',got:false,baseY:2.0,phase:Math.random()*Math.PI*2};
+  scene.add(g); cols.push(g);
+}
 function makePearlChain(seg){
   const lane=Math.floor(Math.random()*3), count=4+Math.floor(Math.random()*3);
   const startZ=seg.position.z-C.segLen*0.3;
@@ -1373,6 +1457,10 @@ function initWorld(){
       if(Math.random()<C.shieldFreq) makeShieldPickup(sg);
       if(Math.random()<C.magnetFreq) makeMagnetPickup(sg);
       if(Math.random()<C.x2Freq) makeX2Pickup(sg);
+      if(Math.random()<C.dashFreq) makeDashPickup(sg);
+      if(Math.random()<C.timeSlowFreq) makeTimeSlowPickup(sg);
+      if(Math.random()<C.decoyFreq) makeDecoyPickup(sg);
+      if(Math.random()<C.shrinkFreq) makeShrinkPickup(sg);
     }
   }
   if(!speedLines.length) initSpeedLines();
@@ -1455,6 +1543,10 @@ const $s=document.getElementById('score-val'),
       $shb=document.getElementById('shield-badge'),
       $mb=document.getElementById('magnet-badge'),
       $x2b=document.getElementById('x2-badge'),
+      $db=document.getElementById('dash-badge'),
+      $slb=document.getElementById('slow-badge'),
+      $tb=document.getElementById('tiny-badge'),
+      $ink=document.getElementById('ink-overlay'),
       $bi=document.getElementById('best-inline'),
       $po=document.getElementById('pause-overlay'),
       $rv=document.getElementById('revive-btn'),
@@ -1547,6 +1639,9 @@ function startGame(){
   $ts.style.display='none'; $go.style.display='none';
   $bo.classList.remove('show'); $co.classList.remove('show'); $shb.classList.remove('show');
   $mb.classList.remove('show'); $x2b.classList.remove('show');
+  $db.classList.remove('show'); $slb.classList.remove('show'); $tb.classList.remove('show');
+  $ink.style.opacity='0';
+  decoyFish.visible=false;
   $inv.style.opacity='0';
   scene.background=makeSky(C.levels[0].skyT,C.levels[0].skyM,C.levels[0].skyB);
   applyLevelLerp(0,0,0);
@@ -1615,6 +1710,7 @@ document.getElementById('mute-btn').onclick=()=>{
 };
 
 function dist2(ax,ay,bx,by){const dx=ax-bx,dy=ay-by;return Math.sqrt(dx*dx+dy*dy);}
+function hitR(){return C.hitRadius*(S.sizeF<0.8?0.6:1);}
 function dist3(a,b){const dx=a.x-b.x,dy=a.y-b.y,dz=a.z-b.z;return Math.sqrt(dx*dx+dy*dy+dz*dz);}
 
 // ─── MAIN LOOP ───
@@ -1629,8 +1725,10 @@ function loop(now){
   const dt=rawDt*S.ts;
 
   if(S.on&&!S.paused){
-    const spd=S.boost?S.speed*1.6:S.speed;
+    let spd=S.boost?S.speed*1.6:S.speed;
+    if(S.dashT>0){ spd*=2.2; S.dashT-=dt; if(S.dashT<=0)$db.classList.remove('show'); }
     S.dist+=spd*dt;
+    if(S.timeSlowT>0){ S.timeSlowT-=dt; spd*=0.75; if(S.timeSlowT<=0)$slb.classList.remove('show'); }
     S.speed=Math.min(C.maxSpeed,S.speed+C.speedUp*dt);
     S.score=Math.floor(S.dist)+S.pearls*10;
 
@@ -1658,6 +1756,12 @@ function loop(now){
       const cDir=(S.curveTgtX>=0?-1:1)*(Math.random()<0.75?1:-1);
       S.curveTgtX=cDir*(1.6+Math.random()*1.8);
       S.curveTgtY=Math.random()<0.35?-(0.5+Math.random()*0.9):(Math.random()-0.5)*0.8;
+    }
+    // Ink blindness
+    if(S.inkedT>0){
+      S.inkedT-=dt;
+      $ink.style.opacity=Math.min(1,S.inkedT/0.4).toString();
+      if(S.inkedT<=0)$ink.style.opacity='0';
     }
     // Invincibility
     if(S.invincible){
@@ -1714,10 +1818,12 @@ function loop(now){
       player.userData.vy=0; player.userData.grounded=true;
     }
 
-    // Squash & stretch
+    // Squash & stretch (+ shrink power-up scale)
+    if(S.shrinkT>0){ S.shrinkT-=dt; if(S.shrinkT<=0)$tb.classList.remove('show'); }
+    S.sizeF+=((S.shrinkT>0?0.5:1)-S.sizeF)*0.1;
     const vr=player.userData.vy/C.maxJumpV;
     const stretch=1+Math.abs(vr)*0.3, squash=1/Math.sqrt(Math.max(0.5,stretch));
-    player.scale.set(squash,Math.max(0.65,stretch),squash);
+    player.scale.set(squash*S.sizeF,Math.max(0.65,stretch)*S.sizeF,squash*S.sizeF);
     player.rotation.x=vr*0.35;
 
     // Animations
@@ -1748,6 +1854,15 @@ function loop(now){
     player.rotation.z=-(C.lanes[S.tgtLane]-player.position.x)*0.08;
     charL.position.set(player.position.x,player.position.y+1,player.position.z+1);
 
+    // Decoy fish orbits the player
+    if(S.decoy){
+      const oa=t*2.4;
+      decoyFish.position.set(player.position.x+Math.cos(oa)*1.5, player.position.y+0.4+Math.sin(oa*1.7)*0.3, player.position.z+Math.sin(oa)*1.0);
+      decoyFish.rotation.y=Math.sin(oa)*0.5;
+      decoyFish.userData.swimPhase+=dt*10;
+      decoyFish.userData.tailG.rotation.y=Math.sin(decoyFish.userData.swimPhase-0.8)*0.45;
+    }
+
     // Bubble wake trailing the swimmer, denser at speed
     S.wakeT-=dt;
     if(S.wakeT<=0){
@@ -1772,6 +1887,10 @@ function loop(now){
         if(Math.random()<C.shieldFreq) makeShieldPickup(newSg);
         if(Math.random()<C.magnetFreq) makeMagnetPickup(newSg);
         if(Math.random()<C.x2Freq) makeX2Pickup(newSg);
+        if(Math.random()<C.dashFreq) makeDashPickup(newSg);
+        if(Math.random()<C.timeSlowFreq) makeTimeSlowPickup(newSg);
+        if(Math.random()<C.decoyFreq) makeDecoyPickup(newSg);
+        if(Math.random()<C.shrinkFreq) makeShrinkPickup(newSg);
       }
     });
 
@@ -1803,12 +1922,23 @@ function loop(now){
       if(o.userData.kind==='barrier'){
         if(Math.abs(player.position.z-o.position.z)<1.8){
           const playerLane=C.lanes.reduce((best,lx,li)=>Math.abs(player.position.x-lx)<Math.abs(player.position.x-C.lanes[best])?li:best,0);
-          if(playerLane!==o.userData.safeLane&&!S.invincible){if(takeDamage())return;}
+          if(playerLane!==o.userData.safeLane&&!S.invincible&&S.dashT<=0){
+            if(S.decoy){ S.decoy=false; decoyFish.visible=false; S.invincible=true; S.invincibleT=0.8; flash('#40e0ff',150); SFX.hit(); }
+            else if(takeDamage())return;
+          }
           if(S.dead)return;
         }
       } else if(o.userData.kind==='sweeper'
           ? (Math.abs(player.position.z-o.position.z)<0.85 && player.position.y-player.userData.baseY<1.15 && Math.abs(player.position.x-o.position.x)<1.9)
-          : dist3(player.position,o.position)<C.hitRadius){
+          : dist3(player.position,o.position)<hitR()){
+        if(S.decoy&&!S.invincible&&S.dashT<=0){
+          S.decoy=false; decoyFish.visible=false;
+          S.invincible=true; S.invincibleT=0.8;
+          flash('#40e0ff',150); SFX.hit();
+          PS.burst(decoyFish.position.clone(),[0x40e0ff,0x80f0ff,0xffffff],16,5,4);
+          showPop('DECOY SAVED YOU!',innerWidth/2,innerHeight*0.4,'#80f0ff');
+          scene.remove(o); disposeObj(o); obs.splice(i,1); continue;
+        }
         if(S.shieldActive){
           // Shield absorbs hit
           S.shieldActive=false; player.userData.aura.visible=false; $shb.classList.remove('show');
@@ -1817,7 +1947,7 @@ function loop(now){
           PS.burst(o.position.clone(),[0x00ddff,0x88ffff,0xffffff],12,4,3);
           scene.remove(o); disposeObj(o); obs.splice(i,1); continue;
         }
-        if(!S.invincible){ if(takeDamage()) return; }
+        if(!S.invincible&&S.dashT<=0){ if(takeDamage()) return; }
         if(S.dead) return;
       }
       // Near-miss: obstacle just passed within a whisker — reward the dodge
@@ -1848,7 +1978,7 @@ function loop(now){
       const collectRad=S.shieldActive?C.collectRadius*2.5:C.collectRadius;
       const attractRange=magnetOn?collectRad*7:collectRad*3;
       const d3=dist3(player.position,c.position);
-      const isPowerup=c.userData.kind==='shield'||c.userData.kind==='magnet'||c.userData.kind==='x2';
+      const isPowerup=['shield','magnet','x2','dash','timeSlow','decoy','shrink'].includes(c.userData.kind);
       if(!c.userData.got && d3<attractRange && !isPowerup){
         // attract
         const pull=Math.max(0,1-d3/attractRange)*(magnetOn?0.4:0.25);
@@ -1864,7 +1994,7 @@ function loop(now){
         const screenX=innerWidth/2, screenY=innerHeight/2;
         if(c.userData.kind==='pearl'){
           S.pearls++;
-          let pts=25*mult; if(S.x2)pts*=2; S.score+=pts;
+          let pts=25*mult; if(S.shrinkT>0)pts+=5; if(S.x2)pts*=2; S.score+=pts;
           SFX.collect(mult);
           PS.burst(c.position.clone(),[0xffffff,0xddeeff,0xb8b8ff,0xaaccff],12,4,4);
           showPop('+'+pts,screenX,screenY,'#d8eeff');
@@ -1887,6 +2017,32 @@ function loop(now){
           SFX.powerup();
           PS.burst(c.position.clone(),[0xffe060,0xffaa00,0xffffff],12,4,4);
           showPop('2X SCORE!',screenX,screenY,'#ffe060');
+        } else if(c.userData.kind==='dash'){
+          S.dashT=0.9;
+          $db.classList.add('show');
+          SFX.dash();
+          flash('#ffa030',120);
+          PS.burst(c.position.clone(),[0xffa030,0xffd060,0xffffff],14,5,4);
+          showPop('DASH!',screenX,screenY,'#ffa030');
+        } else if(c.userData.kind==='timeSlow'){
+          S.timeSlowT=3;
+          $slb.classList.add('show');
+          SFX.timeSlow();
+          flash('#b070ff',150);
+          PS.burst(c.position.clone(),[0xb070ff,0xd0a0ff,0xffffff],14,4,4);
+          showPop('SLOW-MO!',screenX,screenY,'#c898ff');
+        } else if(c.userData.kind==='decoy'){
+          S.decoy=true; decoyFish.visible=true;
+          SFX.powerup();
+          PS.burst(c.position.clone(),[0x40e0ff,0x80f0ff,0xffffff],12,4,4);
+          showPop('DECOY!',screenX,screenY,'#80f0ff');
+        } else if(c.userData.kind==='shrink'){
+          S.shrinkT=5;
+          $tb.classList.add('show');
+          SFX.shrink();
+          flash('#ff70b8',120);
+          PS.burst(c.position.clone(),[0xff70b8,0xff98d0,0xffffff],12,4,4);
+          showPop('TINY!',screenX,screenY,'#ff98d0');
         } else if(c.userData.kind==='shield'){
           S.shieldActive=true; S.shieldT=8;
           player.userData.aura.visible=true;
@@ -1903,13 +2059,13 @@ function loop(now){
     }
 
     // Trail
-    if(S.boost){
+    if(S.boost||S.dashT>0){
       trail.forEach((tr,i)=>{
         tr.userData.tgtOp=0.72-i*0.028;
         tr.position.set(player.position.x+Math.sin(t*12+i*0.35)*0.12,player.position.y+Math.cos(t*12+i*0.35)*0.12,player.position.z+0.5+i*0.32);
       });
     }
-    trail.forEach(tr=>{const tgt=S.boost?tr.userData.tgtOp:0;tr.material.opacity+=(tgt-tr.material.opacity)*0.12;});
+    trail.forEach(tr=>{const tgt=(S.boost||S.dashT>0)?tr.userData.tgtOp:0;tr.material.opacity+=(tgt-tr.material.opacity)*0.12;});
 
     PS.update(dt);
     updateHUD();
