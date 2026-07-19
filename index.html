@@ -1916,10 +1916,10 @@ function dist3(a,b){const dx=a.x-b.x,dy=a.y-b.y,dz=a.z-b.z;return Math.sqrt(dx*d
 function updateKraken(dt,t){
   const d=S.dist;
   let ph='none';
-  if(d>=1800) ph='fullAssault';
-  else if(d>=1200) ph='attacking';
-  else if(d>=1000) ph='pursuing';
-  else if(d>=750) ph='silhouette';
+  if(d>=1500) ph='fullAssault';
+  else if(d>=1000) ph='attacking';
+  else if(d>=600) ph='pursuing';
+  else if(d>=350) ph='silhouette';
   if(ph!==S.krakenPhase){
     const was=S.krakenPhase; S.krakenPhase=ph;
     if(ph==='silhouette'){ krakenSil.visible=true; }
@@ -1935,7 +1935,7 @@ function updateKraken(dt,t){
   if(S.krakenPhase==='none') return;
   if(S.krakenPhase==='silhouette'){
     // Looming dark mass drifting in the fog ahead
-    const sf=Math.min(1,(d-750)/250);
+    const sf=Math.min(1,(d-350)/250);
     krakenSil.material.opacity=0.25+sf*0.4;
     krakenSil.position.x=6*Math.sin(t*0.13);
     krakenSil.position.y=9+Math.sin(t*0.3)*1.5;
