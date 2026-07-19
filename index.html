@@ -456,6 +456,7 @@ function resetState() {
     magnetT:0, x2:false, x2T:0,
     dashT:0, timeSlowT:0, decoy:false, shrinkT:0, sizeF:1, inkedT:0,
     torpedoTimer:8,
+    krakenPhase:'none', krakenZ:16, krakenAtkT:6, krakenInkT:5, krakenWaveT:9, survT:0,
     nearMisses:0, nextMilestone:500, best:0, bestShown:false,
     revived:false, fastFall:false, wakeT:0,
     curveTimer:2, curveTgtX:0, curveTgtY:0,
@@ -751,7 +752,7 @@ decoyFish.visible = false;
 scene.add(decoyFish);
 
 // ─── POOLS ───
-const segs=[], obs=[], cols=[], godRays=[], bubbles=[], fishArr=[], trail=[], plankton=[], ambJellies=[], decos=[];
+const segs=[], obs=[], cols=[], godRays=[], bubbles=[], fishArr=[], trail=[], plankton=[], ambJellies=[], decos=[], krakenProj=[];
 const allDisposable = []; // track all scene objects for cleanup
 
 // ─── CANYON WALL ───
@@ -996,6 +997,75 @@ const temple=makeTemple();
 temple.position.set(-19,-2.5,-420);
 temple.rotation.y=0.5;
 scene.add(temple);
+
+// ─── THE KRAKEN ───
+function makeKraken(){
+  const g=new THREE.Group();
+  const kMat=new THREE.MeshPhysicalMaterial({color:0x1a0a2e,roughness:0.55,metalness:0.1,emissive:0x40106a,emissiveIntensity:0.4,clearcoat:0.3});
+  const kMatLight=new THREE.MeshPhysicalMaterial({color:0x2a1445,roughness:0.5,emissive:0x6020a0,emissiveIntensity:0.5});
+  // Body
+  const kBodyG=new THREE.SphereGeometry(4,20,16); kBodyG.scale(1,0.75,1.2);
+  g.add(new THREE.Mesh(kBodyG,kMat));
+  // Mantle
+  const mantle=new THREE.Mesh(new THREE.ConeGeometry(3.2,5.5,10),kMat);
+  mantle.position.y=4.2; mantle.rotation.x=-0.15; g.add(mantle);
+  // Eyes: huge yellow slits (at local -z, which faces the player after the PI yaw)
+  const kEyes=[];
+  for(let s=-1;s<=1;s+=2){
+    const ew=new THREE.Mesh(new THREE.SphereGeometry(1.0,14,12),new THREE.MeshStandardMaterial({color:0xffd820,roughness:0.15,emissive:0xd0a000,emissiveIntensity:1.4}));
+    ew.position.set(s*1.9,1.1,-3.1);
+    const pu=new THREE.Mesh(new THREE.SphereGeometry(0.55,10,8),new THREE.MeshBasicMaterial({color:0x000000}));
+    pu.scale.set(0.35,1,0.35); pu.position.set(s*1.9,1.1,-3.85);
+    g.add(ew,pu); kEyes.push({ew,pu});
+  }
+  // Bioluminescent vein rings on the mantle
+  for(let i=0;i<4;i++){
+    const ring=new THREE.Mesh(new THREE.TorusGeometry(2.6-i*0.5,0.06,6,20),new THREE.MeshBasicMaterial({color:0xa050ff,transparent:true,opacity:0.6}));
+    ring.rotation.x=Math.PI/2; ring.position.y=2.6+i*1.1; g.add(ring);
+  }
+  // 8 ambient tentacles
+  const tents=[];
+  for(let i2=0;i2<8;i2++){
+    const tg=new THREE.Group();
+    const a=(i2/8)*Math.PI*2;
+    for(let j=0;j<6;j++){
+      const jr=0.55*(1-j*0.14);
+      const joint=new THREE.Mesh(new THREE.SphereGeometry(jr,8,6),j%2?kMat:kMatLight);
+      joint.position.set(0,-j*0.9,-j*0.35);
+      tg.add(joint);
+    }
+    tg.position.set(Math.cos(a)*3.2,-1.8,Math.sin(a)*2.2);
+    tg.userData={phase:i2*0.8,baseA:a};
+    g.add(tg); tents.push(tg);
+  }
+  // 2 long attack tentacles with suckers
+  const atkTents=[];
+  for(let s=-1;s<=1;s+=2){
+    const tg=new THREE.Group();
+    for(let j=0;j<9;j++){
+      const jr=0.7*(1-j*0.09);
+      const joint=new THREE.Mesh(new THREE.SphereGeometry(jr,8,6),j%2?kMat:kMatLight);
+      joint.position.set(0,-j*1.0,0);
+      if(j>2){const su=new THREE.Mesh(new THREE.SphereGeometry(jr*0.3,6,5),new THREE.MeshBasicMaterial({color:0xc080ff,transparent:true,opacity:0.7}));su.position.set(0,-j*1.0,jr*0.8);tg.add(su);}
+      tg.add(joint);
+    }
+    tg.position.set(s*4.5,0,-1);
+    tg.userData={side:s,attacking:false,atkLane:1,atkT:0,hitDone:false};
+    g.add(tg); atkTents.push(tg);
+  }
+  g.userData={eyes:kEyes,tents,atkTents};
+  g.visible=false;
+  return g;
+}
+const kraken=makeKraken();
+scene.add(kraken);
+// Silhouette double: giant dark ghost far ahead in the fog for the teaser phase
+const krakenSil=(()=>{
+  const m=new THREE.Mesh(new THREE.SphereGeometry(9,12,10),
+    new THREE.MeshBasicMaterial({color:0x02030a,transparent:true,opacity:0,depthWrite:false}));
+  m.scale.set(1,1.4,1); m.position.set(6,10,-190); m.visible=false;
+  scene.add(m); return m;
+})();
 
 // ─── CAUSTIC ANIMATED FLOOR TEXTURE ───
 // Sandy teal seabed with fixed grain speckles + drifting bright caustic webs.
@@ -1572,8 +1642,8 @@ function disposeObj(obj){
 }
 function initWorld(){
   // Properly dispose and remove old objects
-  [...segs,...obs,...cols].forEach(o=>{disposeObj(o);scene.remove(o);});
-  segs.length=0; obs.length=0; cols.length=0; decos.length=0;
+  [...segs,...obs,...cols,...krakenProj].forEach(o=>{disposeObj(o);scene.remove(o);});
+  segs.length=0; obs.length=0; cols.length=0; decos.length=0; krakenProj.length=0;
   PS.clear();
   for(let i=0;i<C.segCount;i++){
     const sg=makeSeg(-i*C.segLen);
@@ -1769,6 +1839,7 @@ function startGame(){
   $db.classList.remove('show'); $slb.classList.remove('show'); $tb.classList.remove('show');
   $ink.style.opacity='0';
   decoyFish.visible=false;
+  kraken.visible=false; krakenSil.visible=false;
   $inv.style.opacity='0';
   scene.background=makeSky(C.levels[0].skyT,C.levels[0].skyM,C.levels[0].skyB);
   applyLevelLerp(0,0,0);
@@ -1839,6 +1910,165 @@ document.getElementById('mute-btn').onclick=()=>{
 function dist2(ax,ay,bx,by){const dx=ax-bx,dy=ay-by;return Math.sqrt(dx*dx+dy*dy);}
 function hitR(){return C.hitRadius*(S.sizeF<0.8?0.6:1);}
 function dist3(a,b){const dx=a.x-b.x,dy=a.y-b.y,dz=a.z-b.z;return Math.sqrt(dx*dx+dy*dy+dz*dz);}
+
+// ─── KRAKEN UPDATE (phase machine driven by distance) ───
+function updateKraken(dt,t){
+  const d=S.dist;
+  let ph='none';
+  if(d>=1800) ph='fullAssault';
+  else if(d>=1200) ph='attacking';
+  else if(d>=1000) ph='pursuing';
+  else if(d>=750) ph='silhouette';
+  if(ph!==S.krakenPhase){
+    const was=S.krakenPhase; S.krakenPhase=ph;
+    if(ph==='silhouette'){ krakenSil.visible=true; }
+    if(ph==='pursuing'&&(was==='silhouette'||was==='none')){
+      krakenSil.visible=false;
+      kraken.visible=true; S.krakenZ=16;
+      SFX.krakenRoar(); flash('#40106a',300); S.shakeT=0.6; S.shakeAmp=0.14;
+      announceLv('IT FOUND YOU!');
+    }
+    if(ph==='attacking'||ph==='fullAssault'){ kraken.visible=true; krakenSil.visible=false; }
+    if(ph==='fullAssault'){ SFX.krakenRoar(); flash('#ff2020',200); }
+  }
+  if(S.krakenPhase==='none') return;
+  if(S.krakenPhase==='silhouette'){
+    // Looming dark mass drifting in the fog ahead
+    const sf=Math.min(1,(d-750)/250);
+    krakenSil.material.opacity=0.25+sf*0.4;
+    krakenSil.position.x=6*Math.sin(t*0.13);
+    krakenSil.position.y=9+Math.sin(t*0.3)*1.5;
+    return;
+  }
+  // ── Pursuit: kraken hangs between camera and player; closes in when slow ──
+  const spdFrac=(S.speed-C.baseSpeed)/(C.maxSpeed-C.baseSpeed);
+  const tgtZ=(S.boost||S.dashT>0)?17:(5.5+spdFrac*10.5);
+  S.krakenZ+=(tgtZ-S.krakenZ)*0.014;
+  kraken.position.set(player.position.x*0.5, 2.2+Math.sin(t*0.9)*0.5, S.krakenZ);
+  kraken.rotation.y=Math.PI+Math.sin(t*0.5)*0.08; // eyes at local -z face the player
+  kraken.rotation.z=Math.sin(t*0.7)*0.05;
+  // Ambient tentacle writhe
+  kraken.userData.tents.forEach(tg=>{
+    tg.rotation.x=0.5+Math.sin(t*1.4+tg.userData.phase)*0.35;
+    tg.rotation.z=Math.sin(t*1.1+tg.userData.phase)*0.3;
+  });
+  // Caught?
+  if(S.krakenZ<4.5&&!S.invincible&&S.dashT<=0){
+    SFX.krakenRoar();
+    S.krakenZ=13; // recoil after the bite so you get a chance
+    if(S.decoy){ S.decoy=false; decoyFish.visible=false; S.invincible=true; S.invincibleT=1.0; flash('#40e0ff',150); }
+    else if(takeDamage()) return;
+  }
+  // Survival bonus: +50/s while pursued
+  S.survT+=dt;
+  if(S.survT>=1){ S.survT-=1; S.score+=50; }
+
+  if(S.krakenPhase!=='attacking'&&S.krakenPhase!=='fullAssault') return;
+  // ── Tentacle lane slams ──
+  S.krakenAtkT-=dt;
+  if(S.krakenAtkT<=0){
+    S.krakenAtkT=(S.krakenPhase==='fullAssault'?3.5:5.5)+Math.random()*2.5;
+    const atkLane=Math.floor(Math.random()*3);
+    const tent=kraken.userData.atkTents[atkLane<=1?0:1];
+    if(!tent.userData.attacking){
+      tent.userData.attacking=true; tent.userData.atkLane=atkLane; tent.userData.atkT=0; tent.userData.hitDone=false;
+      triggerLW(atkLane); SFX.tentacleWarn();
+      setTimeout(()=>{if(S.on)triggerLW(atkLane);},400);
+      setTimeout(()=>{if(S.on)triggerLW(atkLane);},800);
+    }
+  }
+  kraken.userData.atkTents.forEach(tent=>{
+    const tu=tent.userData;
+    if(!tu.attacking){
+      // Rest pose: curled at the kraken sides
+      tent.rotation.x=0.8+Math.sin(t*1.2+tu.side)*0.2;
+      tent.position.set(tu.side*4.5,0,-1);
+      return;
+    }
+    tu.atkT+=dt;
+    const laneX=C.lanes[tu.atkLane];
+    // NOTE: kraken.rotation.y = PI mirrors child local X and Z in world space.
+    // Local x must be NEGATED and local z POSITIVE to land at world laneX / world z -2.
+    const kx=-(laneX-kraken.position.x), kz=S.krakenZ+2;
+    if(tu.atkT<1.2){
+      // Wind-up: tentacle rises above the frame
+      const wf=tu.atkT/1.2;
+      tent.position.set(kx, 6+wf*6, 4);
+      tent.rotation.x=0.2;
+    } else if(tu.atkT<1.45){
+      // SLAM: drops through the lane at the player z plane
+      const sf2=(tu.atkT-1.2)/0.25;
+      tent.position.set(kx, 12-sf2*13, kz); // world z ~= -2
+      if(sf2>0.5&&!tu.hitDone){
+        tu.hitDone=true;
+        S.shakeT=0.3; S.shakeAmp=0.1; SFX.tentacleSlam();
+        PS.burst(new THREE.Vector3(laneX,0.6,-2),[0x40106a,0x6020a0,0xc8b898],16,5,4);
+        const playerLane=C.lanes.reduce((best,lx,li)=>Math.abs(player.position.x-lx)<Math.abs(player.position.x-C.lanes[best])?li:best,0);
+        if(playerLane===tu.atkLane&&player.position.y-player.userData.baseY<2.2&&!S.invincible&&S.dashT<=0){
+          if(S.decoy){ S.decoy=false; decoyFish.visible=false; S.invincible=true; S.invincibleT=1.0; flash('#40e0ff',150); SFX.hit(); }
+          else if(S.shieldActive){ S.shieldActive=false; player.userData.aura.visible=false; $shb.classList.remove('show'); S.invincible=true; S.invincibleT=0.8; flash('#00ddff',150); SFX.hit(); }
+          else takeDamage();
+        }
+      }
+    } else if(tu.atkT<2.1){
+      // Retract
+      const rf=(tu.atkT-1.45)/0.65;
+      tent.position.set(kx*(1-rf), -1+rf*1, 4-rf*3);
+    } else {
+      tu.attacking=false; tu.hitDone=false;
+    }
+  });
+
+  if(S.krakenPhase!=='fullAssault') return;
+  // ── Ink blast ──
+  S.krakenInkT-=dt;
+  if(S.krakenInkT<=0){
+    S.krakenInkT=4+Math.random()*3;
+    const orb=new THREE.Mesh(new THREE.SphereGeometry(0.55,12,10),
+      new THREE.MeshBasicMaterial({color:0x0a0a14,transparent:true,opacity:0.85}));
+    orb.position.set(kraken.position.x,3,S.krakenZ-2);
+    orb.userData={pKind:'ink',vx:(player.position.x-orb.position.x)*0.6,vz:-(S.speed*1.5+14)};
+    scene.add(orb); krakenProj.push(orb);
+    SFX.inkShot();
+  }
+  // ── Shockwave ring ──
+  S.krakenWaveT-=dt;
+  if(S.krakenWaveT<=0){
+    S.krakenWaveT=8+Math.random()*3;
+    const ring=new THREE.Mesh(new THREE.TorusGeometry(1.2,0.22,8,24),
+      new THREE.MeshBasicMaterial({color:0xa050ff,transparent:true,opacity:0.85}));
+    ring.rotation.x=Math.PI/2;
+    ring.position.set(0,0.55,S.krakenZ-3);
+    ring.userData={pKind:'wave',vz:-(S.speed+10),grow:4.5};
+    scene.add(ring); krakenProj.push(ring);
+    SFX.shockwave();
+    announceLv('JUMP!');
+  }
+  // ── Projectile update ──
+  for(let i=krakenProj.length-1;i>=0;i--){
+    const pr=krakenProj[i];
+    pr.position.z+=pr.userData.vz*dt;
+    if(pr.userData.pKind==='ink'){
+      pr.position.x+=pr.userData.vx*dt;
+      pr.scale.setScalar(1+Math.sin(t*10)*0.12);
+      if(Math.abs(pr.position.z-player.position.z)<1.0&&Math.abs(pr.position.x-player.position.x)<1.0&&Math.abs(pr.position.y-player.position.y)<1.4){
+        S.inkedT=1.5; SFX.inkHit();
+        PS.burst(pr.position.clone(),[0x0a0a14,0x202030],14,4,2);
+        scene.remove(pr); disposeObj(pr); krakenProj.splice(i,1); continue;
+      }
+    } else { // wave
+      pr.scale.x+=pr.userData.grow*dt; pr.scale.y+=pr.userData.grow*dt;
+      pr.material.opacity=Math.max(0.2,pr.material.opacity-dt*0.12);
+      if(Math.abs(pr.position.z-player.position.z)<0.7&&player.position.y-player.userData.baseY<0.9&&!S.invincible&&S.dashT<=0){
+        if(S.decoy){ S.decoy=false; decoyFish.visible=false; S.invincible=true; S.invincibleT=1.0; flash('#40e0ff',150); SFX.hit(); }
+        else if(S.shieldActive){ S.shieldActive=false; player.userData.aura.visible=false; $shb.classList.remove('show'); S.invincible=true; S.invincibleT=0.8; flash('#00ddff',150); SFX.hit(); }
+        else if(takeDamage()){ return; }
+        scene.remove(pr); disposeObj(pr); krakenProj.splice(i,1); continue;
+      }
+    }
+    if(pr.position.z<-60){ scene.remove(pr); disposeObj(pr); krakenProj.splice(i,1); }
+  }
+}
 
 // ─── MAIN LOOP ───
 let prevT=0;
@@ -1930,6 +2160,10 @@ function loop(now){
       announceLv('★ NEW BEST! ★'); SFX.milestone(); flash('#ffd700',130);
     }
     if(S.levelFrac<1){ S.levelFrac=Math.min(1,S.levelFrac+dt*0.8); applyLevelLerp(S.levelFrac,S.prevLevel,S.level); }
+
+    // The Kraken
+    updateKraken(dt,t);
+    if(S.dead) return;
 
     // Charge
     if(S.charging&&player.userData.grounded) S.charge=Math.min(100,S.charge+C.chargeRate*dt*60);
