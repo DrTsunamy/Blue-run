@@ -1067,6 +1067,48 @@ const krakenSil=(()=>{
   m.scale.set(1,1.4,1); m.position.set(6,10,-190); m.visible=false;
   scene.add(m); return m;
 })();
+// Giant slam tentacles: standalone world-space columns that crash down onto lanes.
+// A direct hit is instant game over — the shadow on the track is your warning.
+const bigTents=(()=>{
+  const kMat=new THREE.MeshPhysicalMaterial({color:0x1a0a2e,roughness:0.55,metalness:0.1,emissive:0x40106a,emissiveIntensity:0.5,clearcoat:0.3});
+  const kMatLight=new THREE.MeshPhysicalMaterial({color:0x2a1445,roughness:0.5,emissive:0x6020a0,emissiveIntensity:0.6});
+  const arr=[];
+  for(let n=0;n<3;n++){
+    const g=new THREE.Group();
+    for(let j=0;j<11;j++){
+      const jr=1.05-j*0.055;
+      const joint=new THREE.Mesh(new THREE.SphereGeometry(jr,10,8),j%2?kMat:kMatLight);
+      joint.position.set(Math.sin(j*0.55)*0.5, j*1.35, 0);
+      g.add(joint);
+      // Suckers facing the camera
+      if(j>0&&j<9){
+        const su=new THREE.Mesh(new THREE.SphereGeometry(jr*0.28,6,5),new THREE.MeshBasicMaterial({color:0xc080ff,transparent:true,opacity:0.75}));
+        su.position.set(Math.sin(j*0.55)*0.5, j*1.35, jr*0.85);
+        g.add(su);
+      }
+    }
+    // Tapered tip
+    const tip=new THREE.Mesh(new THREE.ConeGeometry(0.5,2.4,8),kMat);
+    tip.position.set(Math.sin(11*0.55)*0.5,11*1.35+0.9,0);
+    g.add(tip);
+    g.visible=false;
+    g.traverse(ch=>{ if(ch.isMesh&&ch.material&&!ch.material.transparent) ch.castShadow=true; });
+    scene.add(g);
+    const shadow=new THREE.Mesh(new THREE.CircleGeometry(1.5,20),
+      new THREE.MeshBasicMaterial({color:0x100020,transparent:true,opacity:0,depthWrite:false}));
+    shadow.rotation.x=-Math.PI/2; shadow.visible=false;
+    scene.add(shadow);
+    arr.push({g,shadow,state:'idle',timer:0,lane:1,hitDone:false});
+  }
+  return arr;
+})();
+// Sweeping seabed shadow of the unseen hunter
+const huntShadow=(()=>{
+  const m=new THREE.Mesh(new THREE.CircleGeometry(7,24),
+    new THREE.MeshBasicMaterial({color:0x050010,transparent:true,opacity:0,depthWrite:false}));
+  m.rotation.x=-Math.PI/2; m.position.y=0.45; m.scale.set(1.6,1,1); m.visible=false;
+  scene.add(m); return m;
+})();
 
 // ─── CAUSTIC ANIMATED FLOOR TEXTURE ───
 // Sandy teal seabed with fixed grain speckles + drifting bright caustic webs.
@@ -1841,6 +1883,8 @@ function startGame(){
   $ink.style.opacity='0';
   decoyFish.visible=false;
   kraken.visible=false; krakenSil.visible=false;
+  huntShadow.visible=false; huntShadow.material.opacity=0;
+  bigTents.forEach(bt=>{bt.state='idle';bt.g.visible=false;bt.shadow.visible=false;bt.shadow.material.opacity=0;});
   $inv.style.opacity='0';
   scene.background=makeSky(C.levels[0].skyT,C.levels[0].skyM,C.levels[0].skyB);
   applyLevelLerp(0,0,0);
@@ -1912,7 +1956,7 @@ function dist2(ax,ay,bx,by){const dx=ax-bx,dy=ay-by;return Math.sqrt(dx*dx+dy*dy
 function hitR(){return C.hitRadius*(S.sizeF<0.8?0.6:1);}
 function dist3(a,b){const dx=a.x-b.x,dy=a.y-b.y,dz=a.z-b.z;return Math.sqrt(dx*dx+dy*dy+dz*dz);}
 
-// ─── KRAKEN UPDATE (phase machine driven by distance) ───
+// ─── KRAKEN UPDATE (the unseen hunter — giant tentacle slams, phase machine by distance) ───
 function updateKraken(dt,t){
   const d=S.dist;
   let ph='none';
@@ -1925,115 +1969,104 @@ function updateKraken(dt,t){
     if(ph==='silhouette'){ krakenSil.visible=true; }
     if(ph==='pursuing'&&(was==='silhouette'||was==='none')){
       krakenSil.visible=false;
-      kraken.visible=true; S.krakenZ=16;
       SFX.krakenRoar(); flash('#40106a',300); S.shakeT=0.6; S.shakeAmp=0.14;
-      announceLv('IT FOUND YOU!');
+      announceLv('IT HUNTS YOU!');
     }
-    if(ph==='attacking'||ph==='fullAssault'){ kraken.visible=true; krakenSil.visible=false; }
     if(ph==='fullAssault'){ SFX.krakenRoar(); flash('#ff2020',200); }
   }
   if(S.krakenPhase==='none') return;
   if(S.krakenPhase==='silhouette'){
-    // Looming dark mass drifting in the fog ahead
     const sf=Math.min(1,(d-350)/250);
     krakenSil.material.opacity=0.25+sf*0.4;
     krakenSil.position.x=6*Math.sin(t*0.13);
     krakenSil.position.y=9+Math.sin(t*0.3)*1.5;
     return;
   }
-  // ── Pursuit: kraken hangs between camera and player; closes in when slow ──
-  const spdFrac=(S.speed-C.baseSpeed)/(C.maxSpeed-C.baseSpeed);
-  const tgtZ=(S.boost||S.dashT>0)?16:(4.8+spdFrac*8.2);
-  S.krakenZ+=(tgtZ-S.krakenZ)*0.025;
-  kraken.position.set(player.position.x*0.5, 2.2+Math.sin(t*0.9)*0.5, S.krakenZ);
-  kraken.rotation.y=Math.PI+Math.sin(t*0.5)*0.08; // eyes at local -z face the player
-  kraken.rotation.z=Math.sin(t*0.7)*0.05;
-  // Ambient tentacle writhe
-  kraken.userData.tents.forEach(tg=>{
-    tg.rotation.x=0.5+Math.sin(t*1.4+tg.userData.phase)*0.35;
-    tg.rotation.z=Math.sin(t*1.1+tg.userData.phase)*0.3;
-  });
-  // Caught?
-  if(S.krakenZ<4.5&&!S.invincible&&S.dashT<=0){
-    SFX.krakenRoar();
-    S.krakenZ=13; // recoil after the bite so you get a chance
-    if(S.decoy){ S.decoy=false; decoyFish.visible=false; S.invincible=true; S.invincibleT=1.0; flash('#40e0ff',150); }
-    else if(takeDamage()) return;
-  }
-  // Survival bonus: +50/s while pursued
-  S.survT+=dt;
-  if(S.survT>=1){ S.survT-=1; S.score+=50; }
-  // Ambient menace: periodic roar + shake while the hunt is on
+  // ── The hunt is on: ambient dread ──
   S.krakenRoarT=(S.krakenRoarT||0)-dt;
   if(S.krakenRoarT<=0){
     S.krakenRoarT=11+Math.random()*7;
     SFX.krakenRoar(); S.shakeT=0.3; S.shakeAmp=0.07;
   }
-
-  if(S.krakenPhase!=='attacking'&&S.krakenPhase!=='fullAssault') return;
-  // ── Tentacle lane slams ──
+  // Giant shadow sweeps across the seabed
+  huntShadow.visible=true;
+  huntShadow.position.x=Math.sin(t*0.22)*9;
+  huntShadow.position.z=-14+Math.sin(t*0.13)*8;
+  huntShadow.material.opacity=0.16+0.08*Math.sin(t*0.5);
+  // Survival bonus: +50/s while hunted
+  S.survT+=dt;
+  if(S.survT>=1){ S.survT-=1; S.score+=50; }
+  // ── Tentacle slam scheduling ──
   S.krakenAtkT-=dt;
   if(S.krakenAtkT<=0){
-    S.krakenAtkT=(S.krakenPhase==='fullAssault'?2.8:4.2)+Math.random()*2.2;
-    const atkLane=Math.floor(Math.random()*3);
-    const tent=kraken.userData.atkTents[atkLane<=1?0:1];
-    if(!tent.userData.attacking){
-      tent.userData.attacking=true; tent.userData.atkLane=atkLane; tent.userData.atkT=0; tent.userData.hitDone=false;
-      triggerLW(atkLane); SFX.tentacleWarn();
-      setTimeout(()=>{if(S.on)triggerLW(atkLane);},400);
-      setTimeout(()=>{if(S.on)triggerLW(atkLane);},800);
-    }
-  }
-  kraken.userData.atkTents.forEach(tent=>{
-    const tu=tent.userData;
-    if(!tu.attacking){
-      // Rest pose: curled at the kraken sides
-      tent.rotation.x=0.8+Math.sin(t*1.2+tu.side)*0.2;
-      tent.position.set(tu.side*4.5,0,-1);
-      return;
-    }
-    tu.atkT+=dt;
-    const laneX=C.lanes[tu.atkLane];
-    // NOTE: kraken.rotation.y = PI mirrors child local X and Z in world space.
-    // Local x must be NEGATED and local z POSITIVE to land at world laneX / world z -2.
-    const kx=-(laneX-kraken.position.x), kz=S.krakenZ+2;
-    if(tu.atkT<1.2){
-      // Wind-up: tentacle rises above the frame
-      const wf=tu.atkT/1.2;
-      tent.position.set(kx, 6+wf*6, 4);
-      tent.rotation.x=0.2;
-    } else if(tu.atkT<1.45){
-      // SLAM: drops through the lane at the player z plane
-      const sf2=(tu.atkT-1.2)/0.25;
-      tent.position.set(kx, 12-sf2*13, kz); // world z ~= -2
-      if(sf2>0.5&&!tu.hitDone){
-        tu.hitDone=true;
-        S.shakeT=0.3; S.shakeAmp=0.1; SFX.tentacleSlam();
-        PS.burst(new THREE.Vector3(laneX,0.6,-2),[0x40106a,0x6020a0,0xc8b898],16,5,4);
-        const playerLane=C.lanes.reduce((best,lx,li)=>Math.abs(player.position.x-lx)<Math.abs(player.position.x-C.lanes[best])?li:best,0);
-        if(playerLane===tu.atkLane&&player.position.y-player.userData.baseY<2.2&&!S.invincible&&S.dashT<=0){
-          if(S.decoy){ S.decoy=false; decoyFish.visible=false; S.invincible=true; S.invincibleT=1.0; flash('#40e0ff',150); SFX.hit(); }
-          else if(S.shieldActive){ S.shieldActive=false; player.userData.aura.visible=false; $shb.classList.remove('show'); S.invincible=true; S.invincibleT=0.8; flash('#00ddff',150); SFX.hit(); }
-          else takeDamage();
+    const cad=S.krakenPhase==='fullAssault'?2.6:(S.krakenPhase==='attacking'?4.2:6.5);
+    S.krakenAtkT=cad+Math.random()*2.0;
+    const freeT=bigTents.find(bt=>bt.state==='idle');
+    if(freeT){
+      freeT.state='warn'; freeT.timer=1.2;
+      freeT.lane=Math.floor(Math.random()*3);
+      // Double slam in full assault: schedule a second lane too
+      if(S.krakenPhase==='fullAssault'&&Math.random()<0.45){
+        const freeT2=bigTents.find(bt=>bt.state==='idle'&&bt!==freeT);
+        if(freeT2){
+          freeT2.state='warn'; freeT2.timer=1.35;
+          freeT2.lane=(freeT.lane+1+Math.floor(Math.random()*2))%3;
+          triggerLW(freeT2.lane);
         }
       }
-    } else if(tu.atkT<2.1){
-      // Retract
-      const rf=(tu.atkT-1.45)/0.65;
-      tent.position.set(kx*(1-rf), -1+rf*1, 4-rf*3);
-    } else {
-      tu.attacking=false; tu.hitDone=false;
+      triggerLW(freeT.lane); SFX.tentacleWarn();
+      const wl=freeT.lane; setTimeout(()=>{if(S.on)triggerLW(wl);},400); setTimeout(()=>{if(S.on)triggerLW(wl);},800);
+    }
+  }
+  // ── Tentacle state machines ──
+  bigTents.forEach(bt=>{
+    if(bt.state==='idle') return;
+    bt.timer-=dt;
+    const laneX=C.lanes[bt.lane];
+    if(bt.state==='warn'){
+      // Growing shadow on the track — your cue to move
+      bt.shadow.visible=true;
+      bt.shadow.position.set(laneX,0.47,-2);
+      const wf=1-Math.max(0,bt.timer/1.2);
+      bt.shadow.scale.setScalar(0.4+wf*1.3);
+      bt.shadow.material.opacity=0.15+wf*0.4;
+      if(bt.timer<=0){ bt.state='slam'; bt.timer=0.22; bt.g.visible=true; bt.hitDone=false; }
+    } else if(bt.state==='slam'){
+      const sf2=1-Math.max(0,bt.timer/0.22);
+      bt.g.position.set(laneX,15-sf2*15.2,-2);
+      bt.g.rotation.z=Math.sin(t*8+bt.lane)*0.04;
+      if(bt.timer<=0){
+        bt.state='hold'; bt.timer=0.4;
+        S.shakeT=0.35; S.shakeAmp=0.13; SFX.tentacleSlam();
+        PS.burst(new THREE.Vector3(laneX,0.7,-2),[0x40106a,0x6020a0,0xc8b898,0x2a1445],20,6,5);
+      }
+      if(!bt.hitDone&&sf2>0.6){
+        bt.hitDone=true;
+        const playerLane=C.lanes.reduce((best,lx,li)=>Math.abs(player.position.x-lx)<Math.abs(player.position.x-C.lanes[best])?li:best,0);
+        if(playerLane===bt.lane&&Math.abs(player.position.z-(-2))<3.2&&player.position.y-player.userData.baseY<2.4&&!S.invincible&&S.dashT<=0){
+          if(S.decoy){ S.decoy=false; decoyFish.visible=false; S.invincible=true; S.invincibleT=1.2; flash('#40e0ff',180); SFX.hit(); }
+          else if(S.shieldActive){ S.shieldActive=false; player.userData.aura.visible=false; $shb.classList.remove('show'); S.invincible=true; S.invincibleT=1.0; flash('#00ddff',180); SFX.hit(); }
+          else { S.lives=1; takeDamage(); return; } // CRUSHED — instant game over
+        }
+      }
+    } else if(bt.state==='hold'){
+      if(bt.timer<=0){ bt.state='retract'; bt.timer=0.5; }
+    } else if(bt.state==='retract'){
+      const rf=1-Math.max(0,bt.timer/0.5);
+      bt.g.position.y=-0.2+rf*16;
+      bt.shadow.material.opacity=Math.max(0,0.55-rf*0.6);
+      if(bt.timer<=0){ bt.state='idle'; bt.g.visible=false; bt.shadow.visible=false; }
     }
   });
 
   if(S.krakenPhase!=='fullAssault') return;
-  // ── Ink blast ──
+  // ── Ink blast (from the darkness behind) ──
   S.krakenInkT-=dt;
   if(S.krakenInkT<=0){
     S.krakenInkT=4+Math.random()*3;
     const orb=new THREE.Mesh(new THREE.SphereGeometry(0.55,12,10),
       new THREE.MeshBasicMaterial({color:0x0a0a14,transparent:true,opacity:0.85}));
-    orb.position.set(kraken.position.x,3,S.krakenZ-2);
+    orb.position.set(player.position.x*0.5,5,9);
     orb.userData={pKind:'ink',vx:(player.position.x-orb.position.x)*0.6,vz:-(S.speed*1.5+14)};
     scene.add(orb); krakenProj.push(orb);
     SFX.inkShot();
@@ -2045,7 +2078,7 @@ function updateKraken(dt,t){
     const ring=new THREE.Mesh(new THREE.TorusGeometry(1.2,0.22,8,24),
       new THREE.MeshBasicMaterial({color:0xa050ff,transparent:true,opacity:0.85}));
     ring.rotation.x=Math.PI/2;
-    ring.position.set(0,0.55,S.krakenZ-3);
+    ring.position.set(0,0.55,8);
     ring.userData={pKind:'wave',vz:-(S.speed+10),grow:4.5};
     scene.add(ring); krakenProj.push(ring);
     SFX.shockwave();
@@ -2076,7 +2109,6 @@ function updateKraken(dt,t){
     if(pr.position.z<-60){ scene.remove(pr); disposeObj(pr); krakenProj.splice(i,1); }
   }
 }
-
 // ─── MAIN LOOP ───
 let prevT=0;
 function loop(now){
