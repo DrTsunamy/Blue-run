@@ -474,6 +474,7 @@ function resetState() {
     magnetT:0, x2:false, x2T:0,
     dashT:0, timeSlowT:0, decoy:false, shrinkT:0, sizeF:1, inkedT:0,
     torpedoTimer:8,
+    hitStopT:0, jumpBufT:0, airT:0,
     krakenPhase:'none', krakenZ:16, krakenAtkT:6, krakenInkT:5, krakenWaveT:9, survT:0,
     nearMisses:0, nextMilestone:500, best:0, bestShown:false,
     revived:false, fastFall:false, wakeT:0,
@@ -1784,6 +1785,7 @@ document.addEventListener('keydown',e=>{
   if((e.code==='ArrowLeft'||e.code==='KeyA')&&S.tgtLane>0){S.tgtLane--;SFX.swish();}
   if((e.code==='ArrowRight'||e.code==='KeyD')&&S.tgtLane<2){S.tgtLane++;SFX.swish();}
   if(e.code==='Space'&&player.userData.grounded&&!S.charging){S.charging=true;document.getElementById('charge-wrap').classList.add('show');}
+  else if(e.code==='Space'&&!player.userData.grounded){S.jumpBufT=0.18;} // jump buffering
   if((e.code==='ArrowDown'||e.code==='KeyS')&&!player.userData.grounded){player.userData.vy=Math.min(player.userData.vy,-30);S.fastFall=true;}
   // DEV: skip ahead to test later levels (Shift+K)
   if(e.code==='KeyK'&&e.shiftKey){S.dist+=250;}
@@ -1795,6 +1797,7 @@ document.addEventListener('keyup',e=>{
 document.addEventListener('touchstart',e=>{
   txStart=e.touches[0].clientX; tyStart=e.touches[0].clientY;
   if(S.on&&!S.paused&&player.userData.grounded&&!S.charging){S.charging=true;document.getElementById('charge-wrap').classList.add('show');}
+  else if(S.on&&!S.paused&&!player.userData.grounded){S.jumpBufT=0.18;} // jump buffering
   SFX.resume();
 },{passive:true});
 document.addEventListener('touchend',()=>{ if(S.charging) doJump(); },{passive:true});
@@ -1816,7 +1819,10 @@ document.addEventListener('touchmove',e=>{
 function doJump(){
   S.charging=false;
   document.getElementById('charge-wrap').classList.remove('show');
-  if(!player.userData.grounded) return;
+  // Coyote time: a jump pressed a hair after leaving the ground still counts.
+  // vy guard blocks double-jumps (a real jump launches at vy >= 13.5).
+  const coyote=S.airT<0.1&&player.userData.vy<2;
+  if(!player.userData.grounded&&!coyote) return;
   const pct=S.charge/100;
   player.userData.vy=C.jumpV+pct*(C.maxJumpV-C.jumpV);
   player.userData.grounded=false;
@@ -1989,6 +1995,7 @@ function startGame(){
 function takeDamage(){
   if(S.invincible || S.shieldActive) return false;
   S.lives--;
+  S.hitStopT=0.09;
   SFX.hit();
   flash('#ff0000',180);
   S.shakeT=0.35; S.shakeAmp=0.12;
@@ -2207,7 +2214,9 @@ function updateKraken(dt,t){
 let prevT=0;
 function loop(now){
   requestAnimationFrame(loop);
-  const rawDt=Math.min((now-prevT)/1000,0.08); prevT=now; const t=now*0.001;
+  let rawDt=Math.min((now-prevT)/1000,0.08); prevT=now; const t=now*0.001;
+  // Hit-stop: world freezes for a beat on impact (still renders)
+  if(S.hitStopT>0){ S.hitStopT-=rawDt; rawDt=0; }
   // Slow-motion: ease timescale toward 0.35 during the last-life beat
   let tsTgt=1;
   if(S.on&&S.slowmoT>0){ S.slowmoT-=rawDt; tsTgt=0.35; }
@@ -2321,7 +2330,15 @@ function loop(now){
         PS.burst(new THREE.Vector3(player.position.x,0.3,player.position.z),[0xc8b898,0xa89878,0xffffff],14,5,3);
       }
       player.userData.vy=0; player.userData.grounded=true;
+      // Jump buffering: Space pressed just before landing → act on touchdown
+      if(S.jumpBufT>0){
+        S.jumpBufT=0;
+        if(keys['Space']){ S.charging=true; document.getElementById('charge-wrap').classList.add('show'); }
+        else doJump();
+      }
     }
+    S.airT=player.userData.grounded?0:S.airT+dt;
+    if(S.jumpBufT>0)S.jumpBufT-=dt;
 
     // Squash & stretch (+ shrink power-up scale)
     if(S.shrinkT>0){ S.shrinkT-=dt; if(S.shrinkT<=0)$tb.classList.remove('show'); }
