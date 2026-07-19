@@ -261,6 +261,22 @@ if(window.THREE){
 (() => {
 'use strict';
 
+// ─── FILM GRAIN OVERLAY ───
+const grainDiv=(()=>{
+  const cv=document.createElement('canvas'); cv.width=cv.height=128;
+  const cx=cv.getContext('2d');
+  const img=cx.createImageData(128,128);
+  for(let i=0;i<img.data.length;i+=4){
+    const v=110+Math.random()*70;
+    img.data[i]=img.data[i+1]=img.data[i+2]=v; img.data[i+3]=255;
+  }
+  cx.putImageData(img,0,0);
+  const d=document.createElement('div');
+  d.style.cssText='position:absolute;top:0;left:0;width:100%;height:100%;pointer-events:none;z-index:56;mix-blend-mode:overlay;opacity:0.06;background-image:url('+cv.toDataURL()+');background-repeat:repeat;';
+  document.getElementById('game-container').appendChild(d);
+  return d;
+})();
+
 // ─── TITLE BUBBLES ───
 const $tBub = document.getElementById('title-bubbles');
 for (let i = 0; i < 25; i++) {
@@ -490,7 +506,7 @@ try {
   if (THREE.EffectComposer && THREE.RenderPass && THREE.UnrealBloomPass) {
     composer = new THREE.EffectComposer(ren);
     composer.addPass(new THREE.RenderPass(scene, cam));
-    const bloom = new THREE.UnrealBloomPass(new THREE.Vector2(innerWidth, innerHeight), 0.5, 0.6, 0.85);
+    const bloom = new THREE.UnrealBloomPass(new THREE.Vector2(innerWidth, innerHeight), 0.58, 0.65, 0.82);
     composer.addPass(bloom);
     if (THREE.ShaderPass) {
       // Custom underwater lens: gentle refraction wobble + chromatic aberration
@@ -640,7 +656,7 @@ const scaleBump=makeBumpTex((c,s)=>{
 const M = {
   track: new THREE.MeshStandardMaterial({color:0x9fb4ae,roughness:0.85,metalness:0.05,envMapIntensity:0.3}),
   trackLine: new THREE.MeshStandardMaterial({color:0x385868,roughness:0.9}),
-  trackGlow: new THREE.MeshStandardMaterial({color:0x30a0c0,emissive:0x104050,emissiveIntensity:0.3,roughness:0.5}),
+  trackGlow: new THREE.MeshStandardMaterial({color:0x30a0c0,emissive:0x1a6880,emissiveIntensity:0.55,roughness:0.5}),
   wall: new THREE.MeshStandardMaterial({color:0x5a7868,roughness:0.9,metalness:0.02,bumpMap:rockBump,bumpScale:0.4,envMapIntensity:0.35}),
   wallDark: new THREE.MeshStandardMaterial({color:0x3a5848,roughness:0.95,bumpMap:rockBump,bumpScale:0.45,envMapIntensity:0.35}),
   wallMoss: new THREE.MeshStandardMaterial({color:0x406838,roughness:0.8,bumpMap:rockBump,bumpScale:0.3}),
@@ -1110,6 +1126,50 @@ const huntShadow=(()=>{
   scene.add(m); return m;
 })();
 
+// ─── ANIMATED WATER SURFACE (undulating sheet of light overhead) ───
+const waterSurf=(()=>{
+  const geo=new THREE.PlaneGeometry(260,520,36,52);
+  const mat=new THREE.ShaderMaterial({
+    transparent:true, depthWrite:false, side:THREE.DoubleSide, blending:THREE.AdditiveBlending,
+    uniforms:{uTime:{value:0},uBright:{value:1.0}},
+    vertexShader:[
+      'uniform float uTime; varying float vH;',
+      'void main(){',
+      '  vec3 p=position;',
+      '  float w=sin(p.x*0.11+uTime*1.1)*0.6+sin(p.y*0.07+uTime*0.7)*0.8+sin((p.x+p.y)*0.05+uTime*0.5)*0.5;',
+      '  p.z+=w; vH=w;',
+      '  gl_Position=projectionMatrix*modelViewMatrix*vec4(p,1.0);',
+      '}'].join('\n'),
+    fragmentShader:[
+      'varying float vH; uniform float uBright;',
+      'void main(){',
+      '  float b=smoothstep(-1.5,1.9,vH);',
+      '  vec3 col=mix(vec3(0.15,0.45,0.55),vec3(1.0,0.95,0.75),b);',
+      '  gl_FragColor=vec4(col*uBright,(0.08+b*0.20)*uBright);',
+      '}'].join('\n')
+  });
+  const m=new THREE.Mesh(geo,mat);
+  m.rotation.x=Math.PI/2; m.position.set(0,16.5,-140);
+  scene.add(m); return m;
+})();
+
+// ─── MARINE SNOW (drifting sediment motes — one cheap Points draw call) ───
+const snow=(()=>{
+  const N=420, pos=new Float32Array(N*3), spd=new Float32Array(N);
+  for(let i=0;i<N;i++){
+    pos[i*3]=(Math.random()-0.5)*60;
+    pos[i*3+1]=Math.random()*32-5;
+    pos[i*3+2]=-150+Math.random()*165;
+    spd[i]=0.25+Math.random()*0.75;
+  }
+  const g=new THREE.BufferGeometry();
+  g.setAttribute('position',new THREE.BufferAttribute(pos,3));
+  const mtl=new THREE.PointsMaterial({color:0xdceeff,size:0.09,transparent:true,opacity:0.5,depthWrite:false,sizeAttenuation:true});
+  const p=new THREE.Points(g,mtl);
+  scene.add(p);
+  return {p,pos,spd,N,attr:g.attributes.position};
+})();
+
 // ─── CAUSTIC ANIMATED FLOOR TEXTURE ───
 // Sandy teal seabed with fixed grain speckles + drifting bright caustic webs.
 const caustic = (() => {
@@ -1183,10 +1243,10 @@ function initPlankton(){
 
 // ─── GOD RAYS ───
 function initGodRays(){
-  for(let i=0;i<18;i++){
-    const w=2+Math.random()*4;
+  for(let i=0;i<26;i++){
+    const w=2+Math.random()*4.5;
     const rg=new THREE.CylinderGeometry(0.3,w,70,8,1,true);
-    const rm=new THREE.MeshBasicMaterial({color:0xfffff0,transparent:true,opacity:0.035+Math.random()*0.05,side:THREE.DoubleSide,depthWrite:false,blending:THREE.AdditiveBlending});
+    const rm=new THREE.MeshBasicMaterial({color:0xfffff0,transparent:true,opacity:0.05+Math.random()*0.065,side:THREE.DoubleSide,depthWrite:false,blending:THREE.AdditiveBlending});
     const r=new THREE.Mesh(rg,rm);
     r.position.set((Math.random()-0.5)*45, 35, -100+Math.random()*70);
     r.rotation.x=0.08+Math.random()*0.2; r.rotation.z=(Math.random()-0.5)*0.5;
@@ -2574,6 +2634,21 @@ function loop(now){
   const curveOn=S.on&&!S.paused;
   CURVE.x.value+=((curveOn?S.curveTgtX:0)-CURVE.x.value)*0.026;
   CURVE.y.value+=((curveOn?S.curveTgtY:0)-CURVE.y.value)*0.026;
+  // Film grain jitter
+  if(((now/50)|0)%2===0) grainDiv.style.backgroundPosition=((Math.random()*128)|0)+'px '+((Math.random()*128)|0)+'px';
+  // Water surface undulation (brightness follows the biome sun)
+  waterSurf.material.uniforms.uTime.value=t;
+  waterSurf.material.uniforms.uBright.value=0.35+sunL.intensity*0.55;
+  // Marine snow drift
+  {
+    const sp=snow.pos;
+    for(let i=0;i<snow.N;i++){
+      sp[i*3+1]-=snow.spd[i]*dt*0.9;
+      sp[i*3]+=Math.sin(t*0.5+i*1.7)*0.004;
+      if(sp[i*3+1]<-6){ sp[i*3+1]=27; sp[i*3]=(Math.random()-0.5)*60; }
+    }
+    snow.attr.needsUpdate=true;
+  }
   // Sand cascades pour continuously (one shared texture scroll)
   sandfallTex.offset.y-=dt*0.55;
   // Underwater lens shader time
@@ -2612,13 +2687,15 @@ function loop(now){
     }
   }
 
-  // Camera
+  // Camera (with subtle cinematic drift)
   cam.position.x+=(player.position.x*0.22-cam.position.x)*0.07;
   cam.position.y=5.5+(player.position.y-2)*0.38;
+  cam.position.x+=Math.sin(t*0.31)*0.08;
+  cam.position.y+=Math.sin(t*0.23)*0.05;
   if(S.shakeT>0){S.shakeT-=dt;const amp=S.shakeAmp*(S.shakeT/0.5);cam.position.x+=(Math.random()-0.5)*amp;cam.position.y+=(Math.random()-0.5)*amp*0.6;}
   if(S.boost){cam.position.x+=(Math.random()-0.5)*0.04;cam.position.y+=(Math.random()-0.5)*0.025;}
   // Bank the camera into lane changes for a swooping feel
-  const bankTgt=S.on?(player.position.x-C.lanes[S.tgtLane])*0.045:0;
+  const bankTgt=S.on?((player.position.x-C.lanes[S.tgtLane])*0.045-CURVE.x.value*0.016):0;
   cam.rotation.z+=(bankTgt-cam.rotation.z)*0.1;
 
   if(composer) composer.render(); else ren.render(scene,cam);
