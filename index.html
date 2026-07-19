@@ -187,6 +187,8 @@
   <div id="vignette"></div>
   <div id="screen-flash"></div>
   <div id="ink-overlay"></div>
+  <video id="cine-vid" muted playsinline style="position:absolute;top:0;left:0;width:100%;height:100%;object-fit:cover;z-index:180;display:none;background:#000;"></video>
+  <div id="cine-skip" style="position:absolute;bottom:26px;right:26px;z-index:181;display:none;font-family:'Nunito',sans-serif;font-weight:900;font-size:14px;color:rgba(255,255,255,0.75);letter-spacing:2px;pointer-events:none;">TAP TO SKIP ▶</div>
   <div id="invincible-overlay"></div>
   <div id="ui">
     <div id="lives-badge" class="hud-badge">
@@ -1854,6 +1856,36 @@ const $s=document.getElementById('score-val'),
 const lw=[document.getElementById('lw-0'),document.getElementById('lw-1'),document.getElementById('lw-2')];
 const hearts=[document.getElementById('h0'),document.getElementById('h1'),document.getElementById('h2')];
 
+// ─── LEVEL-INTRO CINEMATICS ───
+// Plays lv<N>.mp4 (same folder) fullscreen at each level transition.
+// Missing files fail silently — the game continues with the classic title card.
+const $cine=document.getElementById('cine-vid'), $cskip=document.getElementById('cine-skip');
+let cineActive=false;
+function stopCinematic(){
+  if(!cineActive) return;
+  cineActive=false;
+  $cine.style.display='none'; $cskip.style.display='none';
+  try{$cine.pause();}catch(e){}
+  $cine.removeAttribute('src'); $cine.load();
+  S.paused=false;
+}
+function playCinematic(lv){
+  if(cineActive) return;
+  cineActive=true;
+  $cine.onerror=stopCinematic;
+  $cine.onended=stopCinematic;
+  $cine.oncanplay=()=>{
+    if(!cineActive) return;
+    S.paused=true;
+    $cine.style.display='block'; $cskip.style.display='block';
+    $cine.play().catch(stopCinematic);
+  };
+  $cine.onclick=stopCinematic;
+  $cine.src='lv'+lv+'.mp4';
+  // Safety: no file / slow load → bail without pausing gameplay
+  setTimeout(()=>{ if(cineActive&&$cine.readyState<3&&$cine.style.display==='none') stopCinematic(); },2500);
+}
+
 function triggerLW(i){const el=lw[i];el.classList.remove('alert');void el.offsetWidth;el.classList.add('alert');}
 function popB(id){const el=document.getElementById(id);el.classList.add('pop');setTimeout(()=>el.classList.remove('pop'),150);}
 function showPop(txt,cx,cy,color='#ffd700'){
@@ -1943,6 +1975,7 @@ function startGame(){
   $ink.style.opacity='0';
   decoyFish.visible=false;
   kraken.visible=false; krakenSil.visible=false;
+  stopCinematic();
   huntShadow.visible=false; huntShadow.material.opacity=0;
   bigTents.forEach(bt=>{bt.state='idle';bt.g.visible=false;bt.shadow.visible=false;bt.shadow.material.opacity=0;});
   $inv.style.opacity='0';
@@ -1950,6 +1983,7 @@ function startGame(){
   applyLevelLerp(0,0,0);
   updateLivesHUD(); initWorld(); updateHUD();
   SFX.ambientStart(); SFX.musicStop(); SFX.musicStart(0);
+  playCinematic(0);
 }
 
 function takeDamage(){
@@ -2248,6 +2282,7 @@ function loop(now){
       scene.background=makeSky(C.levels[newLv].skyT,C.levels[newLv].skyM,C.levels[newLv].skyB);
       announceLv(C.levels[newLv].name); flash('#ffffff',150); SFX.levelUp();
       SFX.setMusicLevel(newLv);
+      playCinematic(newLv);
     }
     // Distance milestones + live "new best" celebration
     if(S.dist>=S.nextMilestone){
