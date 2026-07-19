@@ -431,7 +431,7 @@ const C = {
   laneSmooth: 0.16, baseSpeed: 11, maxSpeed: 30, speedUp: 0.27,
   jumpV: 13.5, maxJumpV: 24, gravity: 38, chargeRate: 28,
   segLen: 35, segCount: 14,
-  obFreq: 0.38, pearlFreq: 0.42, goldFreq: 0.10, shieldFreq: 0.06,
+  obFreq: 0.44, pearlFreq: 0.42, goldFreq: 0.10, shieldFreq: 0.06,
   magnetFreq: 0.05, x2Freq: 0.045,
   dashFreq: 0.04, timeSlowFreq: 0.035, decoyFreq: 0.03, shrinkFreq: 0.03,
   hitRadius: 0.95, collectRadius: 1.3,
@@ -1058,6 +1058,7 @@ function makeKraken(){
   return g;
 }
 const kraken=makeKraken();
+kraken.scale.setScalar(1.18);
 scene.add(kraken);
 // Silhouette double: giant dark ghost far ahead in the fog for the teaser phase
 const krakenSil=(()=>{
@@ -1942,8 +1943,8 @@ function updateKraken(dt,t){
   }
   // ── Pursuit: kraken hangs between camera and player; closes in when slow ──
   const spdFrac=(S.speed-C.baseSpeed)/(C.maxSpeed-C.baseSpeed);
-  const tgtZ=(S.boost||S.dashT>0)?17:(5.5+spdFrac*10.5);
-  S.krakenZ+=(tgtZ-S.krakenZ)*0.014;
+  const tgtZ=(S.boost||S.dashT>0)?16:(4.8+spdFrac*8.2);
+  S.krakenZ+=(tgtZ-S.krakenZ)*0.025;
   kraken.position.set(player.position.x*0.5, 2.2+Math.sin(t*0.9)*0.5, S.krakenZ);
   kraken.rotation.y=Math.PI+Math.sin(t*0.5)*0.08; // eyes at local -z face the player
   kraken.rotation.z=Math.sin(t*0.7)*0.05;
@@ -1962,12 +1963,18 @@ function updateKraken(dt,t){
   // Survival bonus: +50/s while pursued
   S.survT+=dt;
   if(S.survT>=1){ S.survT-=1; S.score+=50; }
+  // Ambient menace: periodic roar + shake while the hunt is on
+  S.krakenRoarT=(S.krakenRoarT||0)-dt;
+  if(S.krakenRoarT<=0){
+    S.krakenRoarT=11+Math.random()*7;
+    SFX.krakenRoar(); S.shakeT=0.3; S.shakeAmp=0.07;
+  }
 
   if(S.krakenPhase!=='attacking'&&S.krakenPhase!=='fullAssault') return;
   // ── Tentacle lane slams ──
   S.krakenAtkT-=dt;
   if(S.krakenAtkT<=0){
-    S.krakenAtkT=(S.krakenPhase==='fullAssault'?3.5:5.5)+Math.random()*2.5;
+    S.krakenAtkT=(S.krakenPhase==='fullAssault'?2.8:4.2)+Math.random()*2.2;
     const atkLane=Math.floor(Math.random()*3);
     const tent=kraken.userData.atkTents[atkLane<=1?0:1];
     if(!tent.userData.attacking){
@@ -2111,7 +2118,7 @@ function loop(now){
       S.curveTimer=3.5+Math.random()*3.5;
       // Alternate direction more often than not so the canyon reads as S-curves
       const cDir=(S.curveTgtX>=0?-1:1)*(Math.random()<0.75?1:-1);
-      S.curveTgtX=cDir*(1.6+Math.random()*1.8);
+      S.curveTgtX=cDir*(2.2+Math.random()*2.2);
       S.curveTgtY=Math.random()<0.35?-(0.5+Math.random()*0.9):(Math.random()-0.5)*0.8;
     }
 
@@ -2250,9 +2257,9 @@ function loop(now){
         disposeObj(sg); scene.remove(sg); segs.splice(segs.indexOf(sg),1);
         const newSg=makeSeg(fz-C.segLen);
         // Difficulty ramps gently with level so late runs stay tense
-        const obChance=Math.min(0.62,C.obFreq+S.level*0.055);
+        const obChance=Math.min(0.74,C.obFreq+S.level*0.06);
         if(Math.random()<obChance) makeObs(newSg);
-        if(S.level>=2&&Math.random()<obChance*0.4) makeObs(newSg);
+        if(S.level>=1&&Math.random()<obChance*0.45) makeObs(newSg);
         if(Math.random()<C.pearlFreq) makePearlChain(newSg);
         if(Math.random()<C.goldFreq) makeGold(newSg);
         if(Math.random()<C.shieldFreq) makeShieldPickup(newSg);
@@ -2533,8 +2540,8 @@ function loop(now){
   // ─── AMBIENT (always) ───
   // Ease the world bend toward its target (returns to straight outside runs)
   const curveOn=S.on&&!S.paused;
-  CURVE.x.value+=((curveOn?S.curveTgtX:0)-CURVE.x.value)*0.02;
-  CURVE.y.value+=((curveOn?S.curveTgtY:0)-CURVE.y.value)*0.02;
+  CURVE.x.value+=((curveOn?S.curveTgtX:0)-CURVE.x.value)*0.026;
+  CURVE.y.value+=((curveOn?S.curveTgtY:0)-CURVE.y.value)*0.026;
   // Sand cascades pour continuously (one shared texture scroll)
   sandfallTex.offset.y-=dt*0.55;
   // Underwater lens shader time
