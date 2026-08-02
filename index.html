@@ -2,7 +2,7 @@
 <html>
 <head>
   <meta charset="UTF-8">
-  <meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'unsafe-inline' https://cdn.jsdelivr.net https://unpkg.com; style-src 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com; img-src data:; object-src 'none'; base-uri 'none'; form-action 'none'">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'unsafe-inline' https://cdn.jsdelivr.net https://unpkg.com https://cdnjs.cloudflare.com; style-src 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com; img-src data:; media-src 'self'; object-src 'none'; base-uri 'none'; form-action 'none'">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
   <title>Blue Run – Underwater Odyssey</title>
   <style>
@@ -94,6 +94,14 @@
     #magnet-badge.show { opacity:1; animation:shieldPulse 1s ease-in-out infinite alternate; }
     #x2-badge { top:214px; right:18px; background:linear-gradient(180deg,#ffe040,#e8a000 50%,#b07000); border-color:#fff; font-size:14px; padding:5px 14px; opacity:0; transition:opacity .3s; }
     #x2-badge.show { opacity:1; animation:shieldPulse 1s ease-in-out infinite alternate; }
+    #dash-badge { top:280px; right:18px; background:linear-gradient(180deg,#ffa030,#e06010 50%,#a04000); border-color:#fff; font-size:14px; padding:5px 14px; opacity:0; transition:opacity .3s; }
+    #dash-badge.show { opacity:1; animation:shieldPulse 1s ease-in-out infinite alternate; }
+    #slow-badge { top:346px; right:18px; background:linear-gradient(180deg,#b070ff,#7030d0 50%,#4a1898); border-color:#fff; font-size:14px; padding:5px 14px; opacity:0; transition:opacity .3s; }
+    #slow-badge.show { opacity:1; animation:shieldPulse 1s ease-in-out infinite alternate; }
+    #tiny-badge { top:412px; right:18px; background:linear-gradient(180deg,#ff70b8,#d03080 50%,#981858); border-color:#fff; font-size:14px; padding:5px 14px; opacity:0; transition:opacity .3s; }
+    #tiny-badge.show { opacity:1; animation:shieldPulse 1s ease-in-out infinite alternate; }
+    #ink-overlay { position:absolute; top:0; left:0; width:100%; height:100%; pointer-events:none; z-index:57; opacity:0; transition:opacity 0.25s;
+      background:radial-gradient(ellipse at 50% 45%, rgba(5,8,12,0.55) 0%, rgba(2,4,8,0.97) 62%, #000 100%); }
     #best-inline { font-size:11px; color:rgba(255,255,255,0.7); letter-spacing:2px; line-height:1.4; }
 
     /* Pause */
@@ -178,6 +186,9 @@
   <div id="caustics"></div>
   <div id="vignette"></div>
   <div id="screen-flash"></div>
+  <div id="ink-overlay"></div>
+  <video id="cine-vid" muted playsinline style="position:absolute;top:0;left:0;width:100%;height:100%;object-fit:cover;z-index:180;display:none;background:#000;"></video>
+  <div id="cine-skip" style="position:absolute;bottom:26px;right:26px;z-index:181;display:none;font-family:'Nunito',sans-serif;font-weight:900;font-size:14px;color:rgba(255,255,255,0.75);letter-spacing:2px;pointer-events:none;">TAP TO SKIP ▶</div>
   <div id="invincible-overlay"></div>
   <div id="ui">
     <div id="lives-badge" class="hud-badge">
@@ -191,6 +202,9 @@
     <div id="shield-badge" class="hud-badge">🛡 SHIELD</div>
     <div id="magnet-badge" class="hud-badge">🧲 MAGNET</div>
     <div id="x2-badge" class="hud-badge">✨ 2X SCORE</div>
+    <div id="dash-badge" class="hud-badge">💨 DASH</div>
+    <div id="slow-badge" class="hud-badge">⏳ SLOW-MO</div>
+    <div id="tiny-badge" class="hud-badge">🧪 TINY</div>
     <div id="speed-icon">⚡</div>
     <div id="speed-wrap"><div id="speed-fill"></div></div>
     <div id="charge-wrap"><div id="charge-fill"></div></div>
@@ -248,6 +262,22 @@ if(window.THREE){
 <script>
 (() => {
 'use strict';
+
+// ─── FILM GRAIN OVERLAY ───
+const grainDiv=(()=>{
+  const cv=document.createElement('canvas'); cv.width=cv.height=128;
+  const cx=cv.getContext('2d');
+  const img=cx.createImageData(128,128);
+  for(let i=0;i<img.data.length;i+=4){
+    const v=110+Math.random()*70;
+    img.data[i]=img.data[i+1]=img.data[i+2]=v; img.data[i+3]=255;
+  }
+  cx.putImageData(img,0,0);
+  const d=document.createElement('div');
+  d.style.cssText='position:absolute;top:0;left:0;width:100%;height:100%;pointer-events:none;z-index:56;mix-blend-mode:overlay;opacity:0.06;background-image:url('+cv.toDataURL()+');background-repeat:repeat;';
+  document.getElementById('game-container').appendChild(d);
+  return d;
+})();
 
 // ─── TITLE BUBBLES ───
 const $tBub = document.getElementById('title-bubbles');
@@ -310,6 +340,20 @@ const SFX = (() => {
     gold(){ [0,0.06,0.13].forEach((d,i)=>osc('triangle',[760,960,1160][i],null,0.22,0.1,d)); },
     hit(){ noise(0.25, 0.25, 180); osc('sine', 140, 60, 0.2, 0.08); },
     boost(){ osc('sawtooth', 90, 560, 0.45, 0.09); },
+    dash(){ osc('sawtooth', 200, 900, 0.3, 0.1); noise(0.2, 0.1, 900); },
+    timeSlow(){ osc('sine', 800, 200, 0.5, 0.09); },
+    shrink(){ osc('sine', 400, 1200, 0.25, 0.08); },
+    inkHit(){ noise(0.35, 0.25, 150); osc('sine', 220, 70, 0.3, 0.06); },
+    stalactite(){ noise(0.3, 0.2, 300); osc('square', 90, 45, 0.25, 0.07); },
+    crabSnap(){ osc('square', 320, 90, 0.09, 0.12); noise(0.06, 0.12, 1400); },
+    torpedoWarn(){ osc('square', 1200, 900, 0.1, 0.07); osc('square', 1200, 900, 0.1, 0.07, 0.15); },
+    eelCharge(){ osc('sawtooth', 80, 400, 1.4, 0.05); },
+    eelZap(){ noise(0.4, 0.3, 2400); osc('square', 1800, 300, 0.35, 0.09); },
+    krakenRoar(){ noise(1.2, 0.4, 90); osc('sawtooth', 55, 28, 1.1, 0.16); osc('sawtooth', 82, 40, 0.9, 0.1, 0.1); },
+    tentacleWarn(){ osc('sine', 180, 120, 0.35, 0.1); osc('sine', 180, 120, 0.35, 0.1, 0.45); },
+    tentacleSlam(){ noise(0.4, 0.35, 120); osc('sine', 70, 30, 0.35, 0.14); },
+    inkShot(){ osc('sine', 300, 90, 0.3, 0.1); noise(0.15, 0.12, 400); },
+    shockwave(){ osc('sawtooth', 45, 130, 0.7, 0.13); noise(0.5, 0.15, 200); },
     levelUp(){ [0,0.12,0.24,0.38].forEach((d,i)=>osc('square',[420,530,640,850][i],null,0.28,0.07,d)); },
     shield(){ osc('sine', 660, 880, 0.15, 0.06); },
     death(){ noise(0.4, 0.35, 220); osc('sawtooth',180,40,0.4,0.12); },
@@ -405,8 +449,9 @@ const C = {
   laneSmooth: 0.16, baseSpeed: 11, maxSpeed: 30, speedUp: 0.27,
   jumpV: 13.5, maxJumpV: 24, gravity: 38, chargeRate: 28,
   segLen: 35, segCount: 14,
-  obFreq: 0.38, pearlFreq: 0.42, goldFreq: 0.10, shieldFreq: 0.06,
+  obFreq: 0.44, pearlFreq: 0.42, goldFreq: 0.10, shieldFreq: 0.06,
   magnetFreq: 0.05, x2Freq: 0.045,
+  dashFreq: 0.04, timeSlowFreq: 0.035, decoyFreq: 0.03, shrinkFreq: 0.03,
   hitRadius: 0.95, collectRadius: 1.3,
   levels: [
     { name:"CALM REEFS",      dist:0,    skyT:0xffeecc,skyM:0x30b8c8,skyB:0x0c4868, fog:0x0f6478,fogD:0.014, amb:0x88c8d8,sun:0xffffd0,sunI:1.4, wallColor:0x5a7868 },
@@ -427,6 +472,10 @@ function resetState() {
     lives:3, invincible:false, invincibleT:0, shieldActive:false, shieldT:0,
     paused:false, ts:1, slowmoT:0,
     magnetT:0, x2:false, x2T:0,
+    dashT:0, timeSlowT:0, decoy:false, shrinkT:0, sizeF:1, inkedT:0,
+    torpedoTimer:8,
+    hitStopT:0, jumpBufT:0, airT:0,
+    krakenPhase:'none', krakenZ:16, krakenAtkT:6, krakenInkT:5, krakenWaveT:9, survT:0,
     nearMisses:0, nextMilestone:500, best:0, bestShown:false,
     revived:false, fastFall:false, wakeT:0,
     curveTimer:2, curveTgtX:0, curveTgtY:0,
@@ -610,7 +659,7 @@ const scaleBump=makeBumpTex((c,s)=>{
 const M = {
   track: new THREE.MeshStandardMaterial({color:0x9fb4ae,roughness:0.85,metalness:0.05,envMapIntensity:0.3}),
   trackLine: new THREE.MeshStandardMaterial({color:0x385868,roughness:0.9}),
-  trackGlow: new THREE.MeshStandardMaterial({color:0x30a0c0,emissive:0x104050,emissiveIntensity:0.3,roughness:0.5}),
+  trackGlow: new THREE.MeshStandardMaterial({color:0x30a0c0,emissive:0x1a6880,emissiveIntensity:0.55,roughness:0.5}),
   wall: new THREE.MeshStandardMaterial({color:0x5a7868,roughness:0.9,metalness:0.02,bumpMap:rockBump,bumpScale:0.4,envMapIntensity:0.35}),
   wallDark: new THREE.MeshStandardMaterial({color:0x3a5848,roughness:0.95,bumpMap:rockBump,bumpScale:0.45,envMapIntensity:0.35}),
   wallMoss: new THREE.MeshStandardMaterial({color:0x406838,roughness:0.8,bumpMap:rockBump,bumpScale:0.3}),
@@ -715,8 +764,14 @@ const player = buildWarplet();
 player.position.set(0,2,0);
 scene.add(player);
 
+// Decoy fish: a mini Warplet that orbits the player and absorbs one hit
+const decoyFish = buildWarplet();
+decoyFish.scale.setScalar(0.4);
+decoyFish.visible = false;
+scene.add(decoyFish);
+
 // ─── POOLS ───
-const segs=[], obs=[], cols=[], godRays=[], bubbles=[], fishArr=[], trail=[], plankton=[], ambJellies=[], decos=[];
+const segs=[], obs=[], cols=[], godRays=[], bubbles=[], fishArr=[], trail=[], plankton=[], ambJellies=[], decos=[], krakenProj=[];
 const allDisposable = []; // track all scene objects for cleanup
 
 // ─── CANYON WALL ───
@@ -962,6 +1017,162 @@ temple.position.set(-19,-2.5,-420);
 temple.rotation.y=0.5;
 scene.add(temple);
 
+// ─── THE KRAKEN ───
+function makeKraken(){
+  const g=new THREE.Group();
+  const kMat=new THREE.MeshPhysicalMaterial({color:0x1a0a2e,roughness:0.55,metalness:0.1,emissive:0x40106a,emissiveIntensity:0.4,clearcoat:0.3});
+  const kMatLight=new THREE.MeshPhysicalMaterial({color:0x2a1445,roughness:0.5,emissive:0x6020a0,emissiveIntensity:0.5});
+  // Body
+  const kBodyG=new THREE.SphereGeometry(4,20,16); kBodyG.scale(1,0.75,1.2);
+  g.add(new THREE.Mesh(kBodyG,kMat));
+  // Mantle
+  const mantle=new THREE.Mesh(new THREE.ConeGeometry(3.2,5.5,10),kMat);
+  mantle.position.y=4.2; mantle.rotation.x=-0.15; g.add(mantle);
+  // Eyes: huge yellow slits (at local -z, which faces the player after the PI yaw)
+  const kEyes=[];
+  for(let s=-1;s<=1;s+=2){
+    const ew=new THREE.Mesh(new THREE.SphereGeometry(1.0,14,12),new THREE.MeshStandardMaterial({color:0xffd820,roughness:0.15,emissive:0xd0a000,emissiveIntensity:1.4}));
+    ew.position.set(s*1.9,1.1,-3.1);
+    const pu=new THREE.Mesh(new THREE.SphereGeometry(0.55,10,8),new THREE.MeshBasicMaterial({color:0x000000}));
+    pu.scale.set(0.35,1,0.35); pu.position.set(s*1.9,1.1,-3.85);
+    g.add(ew,pu); kEyes.push({ew,pu});
+  }
+  // Bioluminescent vein rings on the mantle
+  for(let i=0;i<4;i++){
+    const ring=new THREE.Mesh(new THREE.TorusGeometry(2.6-i*0.5,0.06,6,20),new THREE.MeshBasicMaterial({color:0xa050ff,transparent:true,opacity:0.6}));
+    ring.rotation.x=Math.PI/2; ring.position.y=2.6+i*1.1; g.add(ring);
+  }
+  // 8 ambient tentacles
+  const tents=[];
+  for(let i2=0;i2<8;i2++){
+    const tg=new THREE.Group();
+    const a=(i2/8)*Math.PI*2;
+    for(let j=0;j<6;j++){
+      const jr=0.55*(1-j*0.14);
+      const joint=new THREE.Mesh(new THREE.SphereGeometry(jr,8,6),j%2?kMat:kMatLight);
+      joint.position.set(0,-j*0.9,-j*0.35);
+      tg.add(joint);
+    }
+    tg.position.set(Math.cos(a)*3.2,-1.8,Math.sin(a)*2.2);
+    tg.userData={phase:i2*0.8,baseA:a};
+    g.add(tg); tents.push(tg);
+  }
+  // 2 long attack tentacles with suckers
+  const atkTents=[];
+  for(let s=-1;s<=1;s+=2){
+    const tg=new THREE.Group();
+    for(let j=0;j<9;j++){
+      const jr=0.7*(1-j*0.09);
+      const joint=new THREE.Mesh(new THREE.SphereGeometry(jr,8,6),j%2?kMat:kMatLight);
+      joint.position.set(0,-j*1.0,0);
+      if(j>2){const su=new THREE.Mesh(new THREE.SphereGeometry(jr*0.3,6,5),new THREE.MeshBasicMaterial({color:0xc080ff,transparent:true,opacity:0.7}));su.position.set(0,-j*1.0,jr*0.8);tg.add(su);}
+      tg.add(joint);
+    }
+    tg.position.set(s*4.5,0,-1);
+    tg.userData={side:s,attacking:false,atkLane:1,atkT:0,hitDone:false};
+    g.add(tg); atkTents.push(tg);
+  }
+  g.userData={eyes:kEyes,tents,atkTents};
+  g.visible=false;
+  return g;
+}
+const kraken=makeKraken();
+kraken.scale.setScalar(1.18);
+scene.add(kraken);
+// Silhouette double: giant dark ghost far ahead in the fog for the teaser phase
+const krakenSil=(()=>{
+  const m=new THREE.Mesh(new THREE.SphereGeometry(9,12,10),
+    new THREE.MeshBasicMaterial({color:0x02030a,transparent:true,opacity:0,depthWrite:false}));
+  m.scale.set(1,1.4,1); m.position.set(6,10,-190); m.visible=false;
+  scene.add(m); return m;
+})();
+// Giant slam tentacles: standalone world-space columns that crash down onto lanes.
+// A direct hit is instant game over — the shadow on the track is your warning.
+const bigTents=(()=>{
+  const kMat=new THREE.MeshPhysicalMaterial({color:0x1a0a2e,roughness:0.55,metalness:0.1,emissive:0x40106a,emissiveIntensity:0.5,clearcoat:0.3});
+  const kMatLight=new THREE.MeshPhysicalMaterial({color:0x2a1445,roughness:0.5,emissive:0x6020a0,emissiveIntensity:0.6});
+  const arr=[];
+  for(let n=0;n<3;n++){
+    const g=new THREE.Group();
+    for(let j=0;j<11;j++){
+      const jr=1.05-j*0.055;
+      const joint=new THREE.Mesh(new THREE.SphereGeometry(jr,10,8),j%2?kMat:kMatLight);
+      joint.position.set(Math.sin(j*0.55)*0.5, j*1.35, 0);
+      g.add(joint);
+      // Suckers facing the camera
+      if(j>0&&j<9){
+        const su=new THREE.Mesh(new THREE.SphereGeometry(jr*0.28,6,5),new THREE.MeshBasicMaterial({color:0xc080ff,transparent:true,opacity:0.75}));
+        su.position.set(Math.sin(j*0.55)*0.5, j*1.35, jr*0.85);
+        g.add(su);
+      }
+    }
+    // Tapered tip
+    const tip=new THREE.Mesh(new THREE.ConeGeometry(0.5,2.4,8),kMat);
+    tip.position.set(Math.sin(11*0.55)*0.5,11*1.35+0.9,0);
+    g.add(tip);
+    g.visible=false;
+    g.traverse(ch=>{ if(ch.isMesh&&ch.material&&!ch.material.transparent) ch.castShadow=true; });
+    scene.add(g);
+    const shadow=new THREE.Mesh(new THREE.CircleGeometry(1.5,20),
+      new THREE.MeshBasicMaterial({color:0x100020,transparent:true,opacity:0,depthWrite:false}));
+    shadow.rotation.x=-Math.PI/2; shadow.visible=false;
+    scene.add(shadow);
+    arr.push({g,shadow,state:'idle',timer:0,lane:1,hitDone:false});
+  }
+  return arr;
+})();
+// Sweeping seabed shadow of the unseen hunter
+const huntShadow=(()=>{
+  const m=new THREE.Mesh(new THREE.CircleGeometry(7,24),
+    new THREE.MeshBasicMaterial({color:0x050010,transparent:true,opacity:0,depthWrite:false}));
+  m.rotation.x=-Math.PI/2; m.position.y=0.45; m.scale.set(1.6,1,1); m.visible=false;
+  scene.add(m); return m;
+})();
+
+// ─── ANIMATED WATER SURFACE (undulating sheet of light overhead) ───
+const waterSurf=(()=>{
+  const geo=new THREE.PlaneGeometry(260,520,36,52);
+  const mat=new THREE.ShaderMaterial({
+    transparent:true, depthWrite:false, side:THREE.DoubleSide, blending:THREE.AdditiveBlending,
+    uniforms:{uTime:{value:0},uBright:{value:1.0}},
+    vertexShader:[
+      'uniform float uTime; varying float vH;',
+      'void main(){',
+      '  vec3 p=position;',
+      '  float w=sin(p.x*0.11+uTime*1.1)*0.6+sin(p.y*0.07+uTime*0.7)*0.8+sin((p.x+p.y)*0.05+uTime*0.5)*0.5;',
+      '  p.z+=w; vH=w;',
+      '  gl_Position=projectionMatrix*modelViewMatrix*vec4(p,1.0);',
+      '}'].join('\n'),
+    fragmentShader:[
+      'varying float vH; uniform float uBright;',
+      'void main(){',
+      '  float b=smoothstep(-1.5,1.9,vH);',
+      '  vec3 col=mix(vec3(0.15,0.45,0.55),vec3(1.0,0.95,0.75),b);',
+      '  gl_FragColor=vec4(col*uBright,(0.03+b*0.09)*uBright);',
+      '}'].join('\n')
+  });
+  const m=new THREE.Mesh(geo,mat);
+  m.rotation.x=Math.PI/2; m.position.set(0,16.5,-140);
+  scene.add(m); return m;
+})();
+
+// ─── MARINE SNOW (drifting sediment motes — one cheap Points draw call) ───
+const snow=(()=>{
+  const N=420, pos=new Float32Array(N*3), spd=new Float32Array(N);
+  for(let i=0;i<N;i++){
+    pos[i*3]=(Math.random()-0.5)*60;
+    pos[i*3+1]=Math.random()*32-5;
+    pos[i*3+2]=-150+Math.random()*165;
+    spd[i]=0.25+Math.random()*0.75;
+  }
+  const g=new THREE.BufferGeometry();
+  g.setAttribute('position',new THREE.BufferAttribute(pos,3));
+  const mtl=new THREE.PointsMaterial({color:0xdceeff,size:0.09,transparent:true,opacity:0.5,depthWrite:false,sizeAttenuation:true});
+  const p=new THREE.Points(g,mtl);
+  scene.add(p);
+  return {p,pos,spd,N,attr:g.attributes.position};
+})();
+
 // ─── CAUSTIC ANIMATED FLOOR TEXTURE ───
 // Sandy teal seabed with fixed grain speckles + drifting bright caustic webs.
 const caustic = (() => {
@@ -1035,10 +1246,10 @@ function initPlankton(){
 
 // ─── GOD RAYS ───
 function initGodRays(){
-  for(let i=0;i<18;i++){
-    const w=2+Math.random()*4;
+  for(let i=0;i<26;i++){
+    const w=2+Math.random()*4.5;
     const rg=new THREE.CylinderGeometry(0.3,w,70,8,1,true);
-    const rm=new THREE.MeshBasicMaterial({color:0xfffff0,transparent:true,opacity:0.035+Math.random()*0.05,side:THREE.DoubleSide,depthWrite:false,blending:THREE.AdditiveBlending});
+    const rm=new THREE.MeshBasicMaterial({color:0xfffff0,transparent:true,opacity:0.05+Math.random()*0.065,side:THREE.DoubleSide,depthWrite:false,blending:THREE.AdditiveBlending});
     const r=new THREE.Mesh(rg,rm);
     r.position.set((Math.random()-0.5)*45, 35, -100+Math.random()*70);
     r.rotation.x=0.08+Math.random()*0.2; r.rotation.z=(Math.random()-0.5)*0.5;
@@ -1235,6 +1446,125 @@ function makeSweeper(seg){
   scene.add(o); obs.push(o);
 }
 
+// ─── STALACTITE (hangs above a lane, drops when you get close) ───
+function makeStalactite(seg){
+  const lane=Math.floor(Math.random()*3);
+  const o=new THREE.Group();
+  const rockG=new THREE.ConeGeometry(0.45,2.2,7);
+  const rpos=rockG.attributes.position, rseed=Math.random()*100;
+  for(let v=0;v<rpos.count;v++){
+    const x=rpos.getX(v),y=rpos.getY(v),z=rpos.getZ(v);
+    const n=1+Math.sin(x*8.3+y*5.1+z*7.7+rseed)*0.13;
+    rpos.setXYZ(v,x*n,y,z*n);
+  }
+  rpos.needsUpdate=true; rockG.computeVertexNormals();
+  const spike=new THREE.Mesh(rockG,M.rock);
+  spike.rotation.x=Math.PI; // point down
+  o.add(spike);
+  // Warning shadow on the floor (grows as it primes)
+  const shadow=new THREE.Mesh(new THREE.CircleGeometry(0.55,16),
+    new THREE.MeshBasicMaterial({color:0x000000,transparent:true,opacity:0.0,depthWrite:false}));
+  shadow.rotation.x=-Math.PI/2;
+  shadow.position.y=0.48;
+  o.add(shadow);
+  o.position.set(C.lanes[lane],0,findSpawnZ(seg));
+  spike.position.y=7.5;
+  o.traverse(ch=>{ if(ch.isMesh&&ch.material&&!ch.material.transparent) ch.castShadow=true; });
+  o.userData={kind:'stalactite',lane,warned:false,state:'hang',fallV:0,spike,shadow,landT:0};
+  scene.add(o); obs.push(o);
+}
+
+// ─── CRAB CLAWS (two arms snap shut across a lane on a rhythm — time your pass) ───
+function makeCrabClaw(seg){
+  const lane=Math.floor(Math.random()*3);
+  const o=new THREE.Group();
+  const shellMat=new THREE.MeshStandardMaterial({color:0xd86030,roughness:0.5,emissive:0x501008,emissiveIntensity:0.3});
+  const arms=[];
+  for(let s=-1;s<=1;s+=2){
+    const arm=new THREE.Group();
+    const aSeg=new THREE.Mesh(new THREE.CylinderGeometry(0.14,0.18,1.1,8),shellMat);
+    aSeg.rotation.z=Math.PI/2; aSeg.position.x=s*0.55; arm.add(aSeg);
+    const pin1=new THREE.Mesh(new THREE.ConeGeometry(0.16,0.7,6),shellMat);
+    pin1.position.set(s*1.2,0.18,0); pin1.rotation.z=-s*1.9; arm.add(pin1);
+    const pin2=new THREE.Mesh(new THREE.ConeGeometry(0.12,0.5,6),shellMat);
+    pin2.position.set(s*1.18,-0.15,0); pin2.rotation.z=-s*1.25; arm.add(pin2);
+    arm.position.set(s*1.55,1.1,0);
+    o.add(arm); arms.push(arm);
+  }
+  o.position.set(C.lanes[lane],0,findSpawnZ(seg));
+  o.traverse(ch=>{ if(ch.isMesh) ch.castShadow=true; });
+  o.userData={kind:'crabClaw',lane,warned:false,cycle:Math.random()*2,arms,snapped:false};
+  scene.add(o); obs.push(o);
+}
+
+// ─── INK CLOUD (blinds you for 1.5s on contact — dodge it) ───
+function makeInkCloud(seg){
+  const lane=Math.floor(Math.random()*3);
+  const o=new THREE.Group();
+  for(let i=0;i<7;i++){
+    const bs=0.35+Math.random()*0.4;
+    const blob=new THREE.Mesh(new THREE.SphereGeometry(bs,10,8),
+      new THREE.MeshBasicMaterial({color:0x0a0a14,transparent:true,opacity:0.55+Math.random()*0.25,depthWrite:false}));
+    blob.position.set((Math.random()-0.5)*1.2,(Math.random()-0.5)*1.0,(Math.random()-0.5)*1.0);
+    blob.userData.puffPhase=Math.random()*Math.PI*2;
+    o.add(blob);
+  }
+  o.position.set(C.lanes[lane],1.9,findSpawnZ(seg));
+  o.userData={kind:'inkCloud',lane,warned:false};
+  scene.add(o); obs.push(o);
+}
+
+// ─── ELECTRIC EEL (coils on a lane, charges, then electrifies the lane 2s) ───
+function makeEelZap(seg){
+  const lane=Math.floor(Math.random()*3);
+  const o=new THREE.Group();
+  const eMat=new THREE.MeshStandardMaterial({color:0x30c8c0,roughness:0.4,emissive:0x087868,emissiveIntensity:0.5});
+  const segsArr=[];
+  for(let i=0;i<8;i++){
+    const r=0.22-i*0.014;
+    const sg=new THREE.Mesh(new THREE.SphereGeometry(r,10,8),eMat);
+    sg.position.set(Math.sin(i*0.9)*0.35,1.2+i*0.16,Math.cos(i*0.9)*0.2);
+    o.add(sg); segsArr.push(sg);
+  }
+  const head=new THREE.Mesh(new THREE.SphereGeometry(0.26,12,10),eMat);
+  head.scale.set(1.1,0.85,1.3); head.position.set(0,1.1,0.15); o.add(head);
+  for(let s=-1;s<=1;s+=2){
+    const eye=new THREE.Mesh(new THREE.SphereGeometry(0.06,6,5),M.eyeH); eye.position.set(s*0.14,1.2,0.36); o.add(eye);
+  }
+  // Zap field: vertical glowing plane across the lane (hidden until zap)
+  const field=new THREE.Mesh(new THREE.PlaneGeometry(2.2,2.6),
+    new THREE.MeshBasicMaterial({color:0x60f0ff,transparent:true,opacity:0,side:THREE.DoubleSide,depthWrite:false,blending:THREE.AdditiveBlending}));
+  field.position.y=1.6; o.add(field);
+  o.position.set(C.lanes[lane],0,findSpawnZ(seg));
+  o.traverse(ch=>{ if(ch.isMesh&&ch.material&&!ch.material.transparent) ch.castShadow=true; });
+  o.userData={kind:'eelZap',lane,warned:false,state:'idle',chargeT:0,zapT:0,eMat,field,segsArr};
+  scene.add(o); obs.push(o);
+}
+
+// ─── TORPEDO FISH (shoots across all lanes from the side — jump or gap it) ───
+function makeTorpedo(){
+  const side=Math.random()<0.5?-1:1;
+  const o=new THREE.Group();
+  const tMat=new THREE.MeshStandardMaterial({color:0x506878,roughness:0.3,metalness:0.6});
+  const tBodyG=new THREE.SphereGeometry(0.32,12,10); tBodyG.scale(2.8,0.9,0.9);
+  o.add(new THREE.Mesh(tBodyG,tMat));
+  const nose=new THREE.Mesh(new THREE.SphereGeometry(0.2,10,8),
+    new THREE.MeshStandardMaterial({color:0xff3020,roughness:0.3,emissive:0xc01000,emissiveIntensity:0.9}));
+  nose.position.x=-side*0.85; o.add(nose);
+  const finMat=new THREE.MeshStandardMaterial({color:0x384858,roughness:0.5});
+  for(let a=0;a<3;a++){
+    const fin=new THREE.Mesh(new THREE.ConeGeometry(0.12,0.32,4),finMat);
+    fin.position.x=side*0.75; fin.rotation.z=side*Math.PI/2; fin.rotation.x=a*Math.PI*2/3; o.add(fin);
+  }
+  const zAt=-8-Math.random()*6;
+  o.position.set(side*16,1.15,zAt);
+  o.userData={kind:'torpedo',lane:1,warned:true,vx:-side*22,streakT:0};
+  // Red warning streak at the entry edge
+  triggerLW(side<0?0:2);
+  SFX.torpedoWarn();
+  scene.add(o); obs.push(o);
+}
+
 // ─── PEARL ARC (rainbow of pearls over a ground obstacle — rewards the jump) ───
 function makePearlArc(seg,lane,zc){
   for(let i=0;i<5;i++){
@@ -1246,9 +1576,16 @@ function makePearlArc(seg,lane,zc){
 // ─── OBSTACLES ───
 function makeObs(seg){
   const lvl=S?S.level:0, r=Math.random(); let t;
-  if(lvl>=2){ if(r<0.18)t=0;else if(r<0.32)t=1;else if(r<0.48)t=2;else if(r<0.64)t=3;else if(r<0.82)t=4;else t=5; }
-  else if(lvl>=1){ if(r<0.24)t=0;else if(r<0.44)t=1;else if(r<0.62)t=2;else if(r<0.80)t=3;else t=5; }
-  else{ if(r<0.33)t=0;else if(r<0.66)t=1;else t=2; }
+  // t: 0 urchin 1 rock 2 jelly 3 mine 4 barrier 5 sweeper 6 stalactite 7 crabClaw 8 inkCloud 9 eelZap
+  if(lvl>=4){      if(r<0.10)t=0;else if(r<0.18)t=1;else if(r<0.28)t=2;else if(r<0.40)t=3;else if(r<0.52)t=4;else if(r<0.62)t=5;else if(r<0.74)t=6;else if(r<0.84)t=7;else if(r<0.92)t=8;else t=9; }
+  else if(lvl>=3){ if(r<0.12)t=0;else if(r<0.22)t=1;else if(r<0.34)t=2;else if(r<0.46)t=3;else if(r<0.58)t=4;else if(r<0.68)t=5;else if(r<0.80)t=6;else if(r<0.88)t=7;else if(r<0.94)t=8;else t=9; }
+  else if(lvl>=2){ if(r<0.14)t=0;else if(r<0.26)t=1;else if(r<0.40)t=2;else if(r<0.52)t=3;else if(r<0.66)t=4;else if(r<0.76)t=5;else if(r<0.86)t=6;else if(r<0.94)t=8;else t=9; }
+  else if(lvl>=1){ if(r<0.20)t=0;else if(r<0.38)t=1;else if(r<0.54)t=2;else if(r<0.68)t=3;else if(r<0.80)t=5;else if(r<0.90)t=7;else t=9; }
+  else{            if(r<0.33)t=0;else if(r<0.66)t=1;else t=2; }
+  if(t===9){ makeEelZap(seg); return; }
+  if(t===8){ makeInkCloud(seg); return; }
+  if(t===7){ makeCrabClaw(seg); return; }
+  if(t===6){ makeStalactite(seg); return; }
   if(t===5){ makeSweeper(seg); return; }
   if(t===4){ makeBarrier(seg); return; }
   if(t===3){ makeMine(seg); return; }
@@ -1345,6 +1682,56 @@ function makeX2Pickup(seg){
   g.userData={kind:'x2',got:false,baseY:2.0,phase:Math.random()*Math.PI*2};
   scene.add(g); cols.push(g);
 }
+function makeDashPickup(seg){
+  const lane=Math.floor(Math.random()*3);
+  const g=new THREE.Group();
+  const aMat=new THREE.MeshStandardMaterial({color:0xffa030,roughness:0.15,metalness:0.7,emissive:0xe06010,emissiveIntensity:0.7});
+  // Double chevron arrow
+  for(let i=0;i<2;i++){
+    const ar=new THREE.Mesh(new THREE.ConeGeometry(0.22,0.34,4),aMat);
+    ar.rotation.x=-Math.PI/2; ar.position.z=-0.12-i*0.3; g.add(ar);
+  }
+  g.add(new THREE.Mesh(new THREE.TorusGeometry(0.45,0.035,6,20),new THREE.MeshBasicMaterial({color:0xffc060,transparent:true,opacity:0.45})));
+  g.position.set(C.lanes[lane],2.0,seg.position.z+(Math.random()-0.5)*C.segLen*0.4);
+  g.userData={kind:'dash',got:false,baseY:2.0,phase:Math.random()*Math.PI*2};
+  scene.add(g); cols.push(g);
+}
+function makeTimeSlowPickup(seg){
+  const lane=Math.floor(Math.random()*3);
+  const g=new THREE.Group();
+  const hMat=new THREE.MeshStandardMaterial({color:0xb070ff,roughness:0.1,metalness:0.6,emissive:0x7030d0,emissiveIntensity:0.7,transparent:true,opacity:0.9});
+  // Hourglass: two cones tip-to-tip
+  const hTop=new THREE.Mesh(new THREE.ConeGeometry(0.22,0.3,8),hMat); hTop.rotation.x=Math.PI; hTop.position.y=0.15; g.add(hTop);
+  const hBot=new THREE.Mesh(new THREE.ConeGeometry(0.22,0.3,8),hMat); hBot.position.y=-0.15; g.add(hBot);
+  g.add(new THREE.Mesh(new THREE.TorusGeometry(0.45,0.035,6,20),new THREE.MeshBasicMaterial({color:0xc898ff,transparent:true,opacity:0.45})));
+  g.position.set(C.lanes[lane],2.0,seg.position.z+(Math.random()-0.5)*C.segLen*0.4);
+  g.userData={kind:'timeSlow',got:false,baseY:2.0,phase:Math.random()*Math.PI*2};
+  scene.add(g); cols.push(g);
+}
+function makeDecoyPickup(seg){
+  const lane=Math.floor(Math.random()*3);
+  const g=new THREE.Group();
+  const fMat=new THREE.MeshStandardMaterial({color:0x40e0ff,roughness:0.2,metalness:0.4,emissive:0x00a0d0,emissiveIntensity:0.8});
+  const dBody=new THREE.Mesh(new THREE.SphereGeometry(0.24,12,10),fMat); dBody.scale.set(0.9,0.8,1.3); g.add(dBody);
+  const dTail=new THREE.Mesh(new THREE.ConeGeometry(0.14,0.3,5),fMat); dTail.position.z=0.38; dTail.rotation.x=-Math.PI/2; g.add(dTail);
+  g.add(new THREE.Mesh(new THREE.TorusGeometry(0.45,0.035,6,20),new THREE.MeshBasicMaterial({color:0x80f0ff,transparent:true,opacity:0.45})));
+  g.position.set(C.lanes[lane],2.0,seg.position.z+(Math.random()-0.5)*C.segLen*0.4);
+  g.userData={kind:'decoy',got:false,baseY:2.0,phase:Math.random()*Math.PI*2};
+  scene.add(g); cols.push(g);
+}
+function makeShrinkPickup(seg){
+  const lane=Math.floor(Math.random()*3);
+  const g=new THREE.Group();
+  const pMat=new THREE.MeshStandardMaterial({color:0xff70b8,roughness:0.1,metalness:0.3,emissive:0xd03080,emissiveIntensity:0.7,transparent:true,opacity:0.9});
+  // Potion bottle: sphere body + cylinder neck + cork
+  const pBody=new THREE.Mesh(new THREE.SphereGeometry(0.22,12,10),pMat); g.add(pBody);
+  const pNeck=new THREE.Mesh(new THREE.CylinderGeometry(0.07,0.09,0.16,8),pMat); pNeck.position.y=0.24; g.add(pNeck);
+  const pCork=new THREE.Mesh(new THREE.CylinderGeometry(0.08,0.08,0.07,8),new THREE.MeshStandardMaterial({color:0xb08048,roughness:0.9})); pCork.position.y=0.35; g.add(pCork);
+  g.add(new THREE.Mesh(new THREE.TorusGeometry(0.45,0.035,6,20),new THREE.MeshBasicMaterial({color:0xff98d0,transparent:true,opacity:0.45})));
+  g.position.set(C.lanes[lane],2.0,seg.position.z+(Math.random()-0.5)*C.segLen*0.4);
+  g.userData={kind:'shrink',got:false,baseY:2.0,phase:Math.random()*Math.PI*2};
+  scene.add(g); cols.push(g);
+}
 function makePearlChain(seg){
   const lane=Math.floor(Math.random()*3), count=4+Math.floor(Math.random()*3);
   const startZ=seg.position.z-C.segLen*0.3;
@@ -1361,8 +1748,8 @@ function disposeObj(obj){
 }
 function initWorld(){
   // Properly dispose and remove old objects
-  [...segs,...obs,...cols].forEach(o=>{disposeObj(o);scene.remove(o);});
-  segs.length=0; obs.length=0; cols.length=0; decos.length=0;
+  [...segs,...obs,...cols,...krakenProj].forEach(o=>{disposeObj(o);scene.remove(o);});
+  segs.length=0; obs.length=0; cols.length=0; decos.length=0; krakenProj.length=0;
   PS.clear();
   for(let i=0;i<C.segCount;i++){
     const sg=makeSeg(-i*C.segLen);
@@ -1373,6 +1760,10 @@ function initWorld(){
       if(Math.random()<C.shieldFreq) makeShieldPickup(sg);
       if(Math.random()<C.magnetFreq) makeMagnetPickup(sg);
       if(Math.random()<C.x2Freq) makeX2Pickup(sg);
+      if(Math.random()<C.dashFreq) makeDashPickup(sg);
+      if(Math.random()<C.timeSlowFreq) makeTimeSlowPickup(sg);
+      if(Math.random()<C.decoyFreq) makeDecoyPickup(sg);
+      if(Math.random()<C.shrinkFreq) makeShrinkPickup(sg);
     }
   }
   if(!speedLines.length) initSpeedLines();
@@ -1394,7 +1785,10 @@ document.addEventListener('keydown',e=>{
   if((e.code==='ArrowLeft'||e.code==='KeyA')&&S.tgtLane>0){S.tgtLane--;SFX.swish();}
   if((e.code==='ArrowRight'||e.code==='KeyD')&&S.tgtLane<2){S.tgtLane++;SFX.swish();}
   if(e.code==='Space'&&player.userData.grounded&&!S.charging){S.charging=true;document.getElementById('charge-wrap').classList.add('show');}
+  else if(e.code==='Space'&&!player.userData.grounded){S.jumpBufT=0.18;} // jump buffering
   if((e.code==='ArrowDown'||e.code==='KeyS')&&!player.userData.grounded){player.userData.vy=Math.min(player.userData.vy,-30);S.fastFall=true;}
+  // DEV: skip ahead to test later levels (Shift+K)
+  if(e.code==='KeyK'&&e.shiftKey){S.dist+=250;}
 });
 document.addEventListener('keyup',e=>{
   keys[e.code]=false;
@@ -1403,6 +1797,7 @@ document.addEventListener('keyup',e=>{
 document.addEventListener('touchstart',e=>{
   txStart=e.touches[0].clientX; tyStart=e.touches[0].clientY;
   if(S.on&&!S.paused&&player.userData.grounded&&!S.charging){S.charging=true;document.getElementById('charge-wrap').classList.add('show');}
+  else if(S.on&&!S.paused&&!player.userData.grounded){S.jumpBufT=0.18;} // jump buffering
   SFX.resume();
 },{passive:true});
 document.addEventListener('touchend',()=>{ if(S.charging) doJump(); },{passive:true});
@@ -1424,7 +1819,10 @@ document.addEventListener('touchmove',e=>{
 function doJump(){
   S.charging=false;
   document.getElementById('charge-wrap').classList.remove('show');
-  if(!player.userData.grounded) return;
+  // Coyote time: a jump pressed a hair after leaving the ground still counts.
+  // vy guard blocks double-jumps (a real jump launches at vy >= 13.5).
+  const coyote=S.airT<0.1&&player.userData.vy<2;
+  if(!player.userData.grounded&&!coyote) return;
   const pct=S.charge/100;
   player.userData.vy=C.jumpV+pct*(C.maxJumpV-C.jumpV);
   player.userData.grounded=false;
@@ -1453,12 +1851,46 @@ const $s=document.getElementById('score-val'),
       $shb=document.getElementById('shield-badge'),
       $mb=document.getElementById('magnet-badge'),
       $x2b=document.getElementById('x2-badge'),
+      $db=document.getElementById('dash-badge'),
+      $slb=document.getElementById('slow-badge'),
+      $tb=document.getElementById('tiny-badge'),
+      $ink=document.getElementById('ink-overlay'),
       $bi=document.getElementById('best-inline'),
       $po=document.getElementById('pause-overlay'),
       $rv=document.getElementById('revive-btn'),
       $inv=document.getElementById('invincible-overlay');
 const lw=[document.getElementById('lw-0'),document.getElementById('lw-1'),document.getElementById('lw-2')];
 const hearts=[document.getElementById('h0'),document.getElementById('h1'),document.getElementById('h2')];
+
+// ─── LEVEL-INTRO CINEMATICS ───
+// Plays lv<N>.mp4 (same folder) fullscreen at each level transition.
+// Missing files fail silently — the game continues with the classic title card.
+const $cine=document.getElementById('cine-vid'), $cskip=document.getElementById('cine-skip');
+let cineActive=false;
+function stopCinematic(){
+  if(!cineActive) return;
+  cineActive=false;
+  $cine.style.display='none'; $cskip.style.display='none';
+  try{$cine.pause();}catch(e){}
+  $cine.removeAttribute('src'); $cine.load();
+  S.paused=false;
+}
+function playCinematic(lv){
+  if(cineActive) return;
+  cineActive=true;
+  $cine.onerror=stopCinematic;
+  $cine.onended=stopCinematic;
+  $cine.oncanplay=()=>{
+    if(!cineActive) return;
+    S.paused=true;
+    $cine.style.display='block'; $cskip.style.display='block';
+    $cine.play().catch(stopCinematic);
+  };
+  $cine.onclick=stopCinematic;
+  $cine.src='lv'+lv+'.mp4';
+  // Safety: no file / slow load → bail without pausing gameplay
+  setTimeout(()=>{ if(cineActive&&$cine.readyState<3&&$cine.style.display==='none') stopCinematic(); },2500);
+}
 
 function triggerLW(i){const el=lw[i];el.classList.remove('alert');void el.offsetWidth;el.classList.add('alert');}
 function popB(id){const el=document.getElementById(id);el.classList.add('pop');setTimeout(()=>el.classList.remove('pop'),150);}
@@ -1545,16 +1977,25 @@ function startGame(){
   $ts.style.display='none'; $go.style.display='none';
   $bo.classList.remove('show'); $co.classList.remove('show'); $shb.classList.remove('show');
   $mb.classList.remove('show'); $x2b.classList.remove('show');
+  $db.classList.remove('show'); $slb.classList.remove('show'); $tb.classList.remove('show');
+  $ink.style.opacity='0';
+  decoyFish.visible=false;
+  kraken.visible=false; krakenSil.visible=false;
+  stopCinematic();
+  huntShadow.visible=false; huntShadow.material.opacity=0;
+  bigTents.forEach(bt=>{bt.state='idle';bt.g.visible=false;bt.shadow.visible=false;bt.shadow.material.opacity=0;});
   $inv.style.opacity='0';
   scene.background=makeSky(C.levels[0].skyT,C.levels[0].skyM,C.levels[0].skyB);
   applyLevelLerp(0,0,0);
   updateLivesHUD(); initWorld(); updateHUD();
   SFX.ambientStart(); SFX.musicStop(); SFX.musicStart(0);
+  playCinematic(0);
 }
 
 function takeDamage(){
   if(S.invincible || S.shieldActive) return false;
   S.lives--;
+  S.hitStopT=0.09;
   SFX.hit();
   flash('#ff0000',180);
   S.shakeT=0.35; S.shakeAmp=0.12;
@@ -1613,13 +2054,169 @@ document.getElementById('mute-btn').onclick=()=>{
 };
 
 function dist2(ax,ay,bx,by){const dx=ax-bx,dy=ay-by;return Math.sqrt(dx*dx+dy*dy);}
+function hitR(){return C.hitRadius*(S.sizeF<0.8?0.6:1);}
 function dist3(a,b){const dx=a.x-b.x,dy=a.y-b.y,dz=a.z-b.z;return Math.sqrt(dx*dx+dy*dy+dz*dz);}
 
+// ─── KRAKEN UPDATE (the unseen hunter — giant tentacle slams, phase machine by distance) ───
+function updateKraken(dt,t){
+  const d=S.dist;
+  let ph='none';
+  if(d>=1500) ph='fullAssault';
+  else if(d>=1000) ph='attacking';
+  else if(d>=600) ph='pursuing';
+  else if(d>=350) ph='silhouette';
+  if(ph!==S.krakenPhase){
+    const was=S.krakenPhase; S.krakenPhase=ph;
+    if(ph==='silhouette'){ krakenSil.visible=true; }
+    if(ph==='pursuing'&&(was==='silhouette'||was==='none')){
+      krakenSil.visible=false;
+      SFX.krakenRoar(); flash('#40106a',300); S.shakeT=0.6; S.shakeAmp=0.14;
+      announceLv('IT HUNTS YOU!');
+    }
+    if(ph==='fullAssault'){ SFX.krakenRoar(); flash('#ff2020',200); }
+  }
+  if(S.krakenPhase==='none') return;
+  if(S.krakenPhase==='silhouette'){
+    const sf=Math.min(1,(d-350)/250);
+    krakenSil.material.opacity=0.25+sf*0.4;
+    krakenSil.position.x=6*Math.sin(t*0.13);
+    krakenSil.position.y=9+Math.sin(t*0.3)*1.5;
+    return;
+  }
+  // ── The hunt is on: ambient dread ──
+  S.krakenRoarT=(S.krakenRoarT||0)-dt;
+  if(S.krakenRoarT<=0){
+    S.krakenRoarT=11+Math.random()*7;
+    SFX.krakenRoar(); S.shakeT=0.3; S.shakeAmp=0.07;
+  }
+  // Giant shadow sweeps across the seabed
+  huntShadow.visible=true;
+  huntShadow.position.x=Math.sin(t*0.22)*9;
+  huntShadow.position.z=-14+Math.sin(t*0.13)*8;
+  huntShadow.material.opacity=0.16+0.08*Math.sin(t*0.5);
+  // Survival bonus: +50/s while hunted
+  S.survT+=dt;
+  if(S.survT>=1){ S.survT-=1; S.score+=50; }
+  // ── Tentacle slam scheduling ──
+  S.krakenAtkT-=dt;
+  if(S.krakenAtkT<=0){
+    const cad=S.krakenPhase==='fullAssault'?2.6:(S.krakenPhase==='attacking'?4.2:6.5);
+    S.krakenAtkT=cad+Math.random()*2.0;
+    const freeT=bigTents.find(bt=>bt.state==='idle');
+    if(freeT){
+      freeT.state='warn'; freeT.timer=1.2;
+      freeT.lane=Math.floor(Math.random()*3);
+      // Double slam in full assault: schedule a second lane too
+      if(S.krakenPhase==='fullAssault'&&Math.random()<0.45){
+        const freeT2=bigTents.find(bt=>bt.state==='idle'&&bt!==freeT);
+        if(freeT2){
+          freeT2.state='warn'; freeT2.timer=1.35;
+          freeT2.lane=(freeT.lane+1+Math.floor(Math.random()*2))%3;
+          triggerLW(freeT2.lane);
+        }
+      }
+      triggerLW(freeT.lane); SFX.tentacleWarn();
+      const wl=freeT.lane; setTimeout(()=>{if(S.on)triggerLW(wl);},400); setTimeout(()=>{if(S.on)triggerLW(wl);},800);
+    }
+  }
+  // ── Tentacle state machines ──
+  bigTents.forEach(bt=>{
+    if(bt.state==='idle') return;
+    bt.timer-=dt;
+    const laneX=C.lanes[bt.lane];
+    if(bt.state==='warn'){
+      // Growing shadow on the track — your cue to move
+      bt.shadow.visible=true;
+      bt.shadow.position.set(laneX,0.47,-2);
+      const wf=1-Math.max(0,bt.timer/1.2);
+      bt.shadow.scale.setScalar(0.4+wf*1.3);
+      bt.shadow.material.opacity=0.15+wf*0.4;
+      if(bt.timer<=0){ bt.state='slam'; bt.timer=0.22; bt.g.visible=true; bt.hitDone=false; }
+    } else if(bt.state==='slam'){
+      const sf2=1-Math.max(0,bt.timer/0.22);
+      bt.g.position.set(laneX,15-sf2*15.2,-2);
+      bt.g.rotation.z=Math.sin(t*8+bt.lane)*0.04;
+      if(bt.timer<=0){
+        bt.state='hold'; bt.timer=0.4;
+        S.shakeT=0.35; S.shakeAmp=0.13; SFX.tentacleSlam();
+        PS.burst(new THREE.Vector3(laneX,0.7,-2),[0x40106a,0x6020a0,0xc8b898,0x2a1445],20,6,5);
+      }
+      if(!bt.hitDone&&sf2>0.6){
+        bt.hitDone=true;
+        const playerLane=C.lanes.reduce((best,lx,li)=>Math.abs(player.position.x-lx)<Math.abs(player.position.x-C.lanes[best])?li:best,0);
+        if(playerLane===bt.lane&&Math.abs(player.position.z-(-2))<3.2&&player.position.y-player.userData.baseY<2.4&&!S.invincible&&S.dashT<=0){
+          if(S.decoy){ S.decoy=false; decoyFish.visible=false; S.invincible=true; S.invincibleT=1.2; flash('#40e0ff',180); SFX.hit(); }
+          else if(S.shieldActive){ S.shieldActive=false; player.userData.aura.visible=false; $shb.classList.remove('show'); S.invincible=true; S.invincibleT=1.0; flash('#00ddff',180); SFX.hit(); }
+          else { S.lives=1; takeDamage(); return; } // CRUSHED — instant game over
+        }
+      }
+    } else if(bt.state==='hold'){
+      if(bt.timer<=0){ bt.state='retract'; bt.timer=0.5; }
+    } else if(bt.state==='retract'){
+      const rf=1-Math.max(0,bt.timer/0.5);
+      bt.g.position.y=-0.2+rf*16;
+      bt.shadow.material.opacity=Math.max(0,0.55-rf*0.6);
+      if(bt.timer<=0){ bt.state='idle'; bt.g.visible=false; bt.shadow.visible=false; }
+    }
+  });
+
+  if(S.krakenPhase!=='fullAssault') return;
+  // ── Ink blast (from the darkness behind) ──
+  S.krakenInkT-=dt;
+  if(S.krakenInkT<=0){
+    S.krakenInkT=4+Math.random()*3;
+    const orb=new THREE.Mesh(new THREE.SphereGeometry(0.55,12,10),
+      new THREE.MeshBasicMaterial({color:0x0a0a14,transparent:true,opacity:0.85}));
+    orb.position.set(player.position.x*0.5,5,9);
+    orb.userData={pKind:'ink',vx:(player.position.x-orb.position.x)*0.6,vz:-(S.speed*1.5+14)};
+    scene.add(orb); krakenProj.push(orb);
+    SFX.inkShot();
+  }
+  // ── Shockwave ring ──
+  S.krakenWaveT-=dt;
+  if(S.krakenWaveT<=0){
+    S.krakenWaveT=8+Math.random()*3;
+    const ring=new THREE.Mesh(new THREE.TorusGeometry(1.2,0.22,8,24),
+      new THREE.MeshBasicMaterial({color:0xa050ff,transparent:true,opacity:0.85}));
+    ring.rotation.x=Math.PI/2;
+    ring.position.set(0,0.55,8);
+    ring.userData={pKind:'wave',vz:-(S.speed+10),grow:4.5};
+    scene.add(ring); krakenProj.push(ring);
+    SFX.shockwave();
+    announceLv('JUMP!');
+  }
+  // ── Projectile update ──
+  for(let i=krakenProj.length-1;i>=0;i--){
+    const pr=krakenProj[i];
+    pr.position.z+=pr.userData.vz*dt;
+    if(pr.userData.pKind==='ink'){
+      pr.position.x+=pr.userData.vx*dt;
+      pr.scale.setScalar(1+Math.sin(t*10)*0.12);
+      if(Math.abs(pr.position.z-player.position.z)<1.0&&Math.abs(pr.position.x-player.position.x)<1.0&&Math.abs(pr.position.y-player.position.y)<1.4){
+        S.inkedT=1.5; SFX.inkHit();
+        PS.burst(pr.position.clone(),[0x0a0a14,0x202030],14,4,2);
+        scene.remove(pr); disposeObj(pr); krakenProj.splice(i,1); continue;
+      }
+    } else { // wave
+      pr.scale.x+=pr.userData.grow*dt; pr.scale.y+=pr.userData.grow*dt;
+      pr.material.opacity=Math.max(0.2,pr.material.opacity-dt*0.12);
+      if(Math.abs(pr.position.z-player.position.z)<0.7&&player.position.y-player.userData.baseY<0.9&&!S.invincible&&S.dashT<=0){
+        if(S.decoy){ S.decoy=false; decoyFish.visible=false; S.invincible=true; S.invincibleT=1.0; flash('#40e0ff',150); SFX.hit(); }
+        else if(S.shieldActive){ S.shieldActive=false; player.userData.aura.visible=false; $shb.classList.remove('show'); S.invincible=true; S.invincibleT=0.8; flash('#00ddff',150); SFX.hit(); }
+        else if(takeDamage()){ return; }
+        scene.remove(pr); disposeObj(pr); krakenProj.splice(i,1); continue;
+      }
+    }
+    if(pr.position.z<-60){ scene.remove(pr); disposeObj(pr); krakenProj.splice(i,1); }
+  }
+}
 // ─── MAIN LOOP ───
 let prevT=0;
 function loop(now){
   requestAnimationFrame(loop);
-  const rawDt=Math.min((now-prevT)/1000,0.08); prevT=now; const t=now*0.001;
+  let rawDt=Math.min((now-prevT)/1000,0.08); prevT=now; const t=now*0.001;
+  // Hit-stop: world freezes for a beat on impact (still renders)
+  if(S.hitStopT>0){ S.hitStopT-=rawDt; rawDt=0; }
   // Slow-motion: ease timescale toward 0.35 during the last-life beat
   let tsTgt=1;
   if(S.on&&S.slowmoT>0){ S.slowmoT-=rawDt; tsTgt=0.35; }
@@ -1627,8 +2224,10 @@ function loop(now){
   const dt=rawDt*S.ts;
 
   if(S.on&&!S.paused){
-    const spd=S.boost?S.speed*1.6:S.speed;
+    let spd=S.boost?S.speed*1.6:S.speed;
+    if(S.dashT>0){ spd*=2.2; S.dashT-=dt; if(S.dashT<=0)$db.classList.remove('show'); }
     S.dist+=spd*dt;
+    if(S.timeSlowT>0){ S.timeSlowT-=dt; spd*=0.75; if(S.timeSlowT<=0)$slb.classList.remove('show'); }
     S.speed=Math.min(C.maxSpeed,S.speed+C.speedUp*dt);
     S.score=Math.floor(S.dist)+S.pearls*10;
 
@@ -1651,9 +2250,27 @@ function loop(now){
     // Negative Y targets are cascade drops — the track ahead dives away.
     S.curveTimer-=dt;
     if(S.curveTimer<=0){
-      S.curveTimer=5+Math.random()*5;
-      S.curveTgtX=(Math.random()-0.5)*1.5;
-      S.curveTgtY=Math.random()<0.35?-(0.4+Math.random()*0.8):(Math.random()-0.5)*0.7;
+      S.curveTimer=3.5+Math.random()*3.5;
+      // Alternate direction more often than not so the canyon reads as S-curves
+      const cDir=(S.curveTgtX>=0?-1:1)*(Math.random()<0.75?1:-1);
+      S.curveTgtX=cDir*(2.2+Math.random()*2.2);
+      S.curveTgtY=Math.random()<0.35?-(0.5+Math.random()*0.9):(Math.random()-0.5)*0.8;
+    }
+
+    // Torpedo volleys from level 3 (TREASURE PALACE) onward
+    if(S.level>=3){
+      S.torpedoTimer-=dt;
+      if(S.torpedoTimer<=0){
+        S.torpedoTimer=(S.level>=4?3.5:6)+Math.random()*3;
+        makeTorpedo();
+        if(S.level>=4&&Math.random()<0.5) setTimeout(()=>{if(S.on&&!S.paused)makeTorpedo();},600);
+      }
+    }
+    // Ink blindness
+    if(S.inkedT>0){
+      S.inkedT-=dt;
+      $ink.style.opacity=Math.min(1,S.inkedT/0.4).toString();
+      if(S.inkedT<=0)$ink.style.opacity='0';
     }
     // Invincibility
     if(S.invincible){
@@ -1674,6 +2291,7 @@ function loop(now){
       scene.background=makeSky(C.levels[newLv].skyT,C.levels[newLv].skyM,C.levels[newLv].skyB);
       announceLv(C.levels[newLv].name); flash('#ffffff',150); SFX.levelUp();
       SFX.setMusicLevel(newLv);
+      playCinematic(newLv);
     }
     // Distance milestones + live "new best" celebration
     if(S.dist>=S.nextMilestone){
@@ -1685,6 +2303,10 @@ function loop(now){
       announceLv('★ NEW BEST! ★'); SFX.milestone(); flash('#ffd700',130);
     }
     if(S.levelFrac<1){ S.levelFrac=Math.min(1,S.levelFrac+dt*0.8); applyLevelLerp(S.levelFrac,S.prevLevel,S.level); }
+
+    // The Kraken
+    updateKraken(dt,t);
+    if(S.dead) return;
 
     // Charge
     if(S.charging&&player.userData.grounded) S.charge=Math.min(100,S.charge+C.chargeRate*dt*60);
@@ -1708,12 +2330,22 @@ function loop(now){
         PS.burst(new THREE.Vector3(player.position.x,0.3,player.position.z),[0xc8b898,0xa89878,0xffffff],14,5,3);
       }
       player.userData.vy=0; player.userData.grounded=true;
+      // Jump buffering: Space pressed just before landing → act on touchdown
+      if(S.jumpBufT>0){
+        S.jumpBufT=0;
+        if(keys['Space']){ S.charging=true; document.getElementById('charge-wrap').classList.add('show'); }
+        else doJump();
+      }
     }
+    S.airT=player.userData.grounded?0:S.airT+dt;
+    if(S.jumpBufT>0)S.jumpBufT-=dt;
 
-    // Squash & stretch
+    // Squash & stretch (+ shrink power-up scale)
+    if(S.shrinkT>0){ S.shrinkT-=dt; if(S.shrinkT<=0)$tb.classList.remove('show'); }
+    S.sizeF+=((S.shrinkT>0?0.5:1)-S.sizeF)*0.1;
     const vr=player.userData.vy/C.maxJumpV;
     const stretch=1+Math.abs(vr)*0.3, squash=1/Math.sqrt(Math.max(0.5,stretch));
-    player.scale.set(squash,Math.max(0.65,stretch),squash);
+    player.scale.set(squash*S.sizeF,Math.max(0.65,stretch)*S.sizeF,squash*S.sizeF);
     player.rotation.x=vr*0.35;
 
     // Animations
@@ -1744,6 +2376,15 @@ function loop(now){
     player.rotation.z=-(C.lanes[S.tgtLane]-player.position.x)*0.08;
     charL.position.set(player.position.x,player.position.y+1,player.position.z+1);
 
+    // Decoy fish orbits the player
+    if(S.decoy){
+      const oa=t*2.4;
+      decoyFish.position.set(player.position.x+Math.cos(oa)*1.5, player.position.y+0.4+Math.sin(oa*1.7)*0.3, player.position.z+Math.sin(oa)*1.0);
+      decoyFish.rotation.y=Math.sin(oa)*0.5;
+      decoyFish.userData.swimPhase+=dt*10;
+      decoyFish.userData.tailG.rotation.y=Math.sin(decoyFish.userData.swimPhase-0.8)*0.45;
+    }
+
     // Bubble wake trailing the swimmer, denser at speed
     S.wakeT-=dt;
     if(S.wakeT<=0){
@@ -1760,20 +2401,25 @@ function loop(now){
         disposeObj(sg); scene.remove(sg); segs.splice(segs.indexOf(sg),1);
         const newSg=makeSeg(fz-C.segLen);
         // Difficulty ramps gently with level so late runs stay tense
-        const obChance=Math.min(0.62,C.obFreq+S.level*0.055);
+        const obChance=Math.min(0.74,C.obFreq+S.level*0.06);
         if(Math.random()<obChance) makeObs(newSg);
-        if(S.level>=2&&Math.random()<obChance*0.4) makeObs(newSg);
+        if(S.level>=1&&Math.random()<obChance*0.45) makeObs(newSg);
         if(Math.random()<C.pearlFreq) makePearlChain(newSg);
         if(Math.random()<C.goldFreq) makeGold(newSg);
         if(Math.random()<C.shieldFreq) makeShieldPickup(newSg);
         if(Math.random()<C.magnetFreq) makeMagnetPickup(newSg);
         if(Math.random()<C.x2Freq) makeX2Pickup(newSg);
+        if(Math.random()<C.dashFreq) makeDashPickup(newSg);
+        if(Math.random()<C.timeSlowFreq) makeTimeSlowPickup(newSg);
+        if(Math.random()<C.decoyFreq) makeDecoyPickup(newSg);
+        if(Math.random()<C.shrinkFreq) makeShrinkPickup(newSg);
       }
     });
 
     // Obstacles
     for(let i=obs.length-1;i>=0;i--){
-      const o=obs[i]; o.position.z+=spd*dt;
+      const o=obs[i];
+      if(o.userData.kind!=='torpedo') o.position.z+=spd*dt;
       if(o.userData.kind==='urchin'){o.rotation.x+=o.userData.rotSpd*dt;o.rotation.y+=o.userData.rotSpd*0.7*dt;}
       else if(o.userData.kind==='jelly'){
         o.position.y=o.userData.baseY+Math.sin(t*2.2+o.userData.phase)*0.65;
@@ -1790,6 +2436,70 @@ function loop(now){
         o.position.x=Math.sin(t*o.userData.spd+o.userData.phase)*2.6;
         o.rotation.y=Math.cos(t*o.userData.spd+o.userData.phase)*0.25;
         o.position.y=0.72+Math.sin(t*3+o.userData.phase)*0.08;
+      } else if(o.userData.kind==='stalactite'){
+        const st=o.userData;
+        if(st.state==='hang'){
+          st.spike.position.y=7.5+Math.sin(t*2+o.position.z)*0.06;
+          const prox=Math.max(0,1-Math.abs(o.position.z+13)/10);
+          st.shadow.material.opacity=prox*0.4;
+          if(o.position.z>-13){ st.state='falling'; SFX.stalactite(); }
+        } else if(st.state==='falling'){
+          st.fallV+=55*dt;
+          st.spike.position.y-=st.fallV*dt;
+          st.shadow.material.opacity=0.45;
+          if(st.spike.position.y<=1.1){
+            st.spike.position.y=1.1; st.state='landed'; st.landT=0;
+            S.shakeT=0.18; S.shakeAmp=0.06;
+            PS.burst(new THREE.Vector3(o.position.x,0.5,o.position.z),[0x585858,0x8a8a8a,0xc8b898],10,4,3);
+          }
+        } else {
+          st.landT+=dt;
+          st.shadow.material.opacity=Math.max(0,0.45-st.landT*0.5);
+        }
+      } else if(o.userData.kind==='crabClaw'){
+        o.userData.cycle=(o.userData.cycle+dt)%2.0;
+        const ccy=o.userData.cycle;
+        // 0-1.4 open, 1.4-1.6 snapping shut, 1.6-2.0 held shut
+        let openF;
+        if(ccy<1.4){ openF=1; o.userData.snapped=false; }
+        else if(ccy<1.6){ openF=1-(ccy-1.4)/0.2; if(!o.userData.snapped){o.userData.snapped=true; if(o.position.z>-25)SFX.crabSnap();} }
+        else openF=0;
+        o.userData.arms[0].position.x=-1.55+(1-openF)*1.05;
+        o.userData.arms[1].position.x= 1.55-(1-openF)*1.05;
+      } else if(o.userData.kind==='inkCloud'){
+        o.children.forEach(b=>{const pf=1+Math.sin(t*1.8+b.userData.puffPhase)*0.15;b.scale.setScalar(pf);});
+        o.rotation.y+=0.3*dt;
+      } else if(o.userData.kind==='eelZap'){
+        const ez=o.userData;
+        ez.segsArr.forEach((sg2,si)=>{sg2.position.x=Math.sin(si*0.9+t*3)*0.35;});
+        if(ez.state==='idle'&&o.position.z>-22){ ez.state='charging'; ez.chargeT=1.5; SFX.eelCharge(); }
+        if(ez.state==='charging'){
+          ez.chargeT-=dt;
+          ez.eMat.emissiveIntensity=0.5+(1.5-ez.chargeT)*2.2+Math.sin(t*30)*0.4;
+          if(ez.chargeT<=0){ ez.state='zapping'; ez.zapT=2.0; SFX.eelZap(); }
+        } else if(ez.state==='zapping'){
+          ez.zapT-=dt;
+          ez.field.material.opacity=0.35+Math.sin(t*40)*0.2;
+          ez.eMat.emissiveIntensity=2.5+Math.sin(t*25)*1.2;
+          if(Math.random()<0.3) PS.burst(new THREE.Vector3(o.position.x+(Math.random()-0.5)*1.6,1+Math.random()*1.6,o.position.z),[0x60f0ff,0xffffff,0xaaffff],1,1,1);
+          if(ez.zapT<=0){ ez.state='done'; ez.field.material.opacity=0; ez.eMat.emissiveIntensity=0.5; }
+        }
+      } else if(o.userData.kind==='torpedo'){
+        o.position.x+=o.userData.vx*dt;
+        o.position.z+=spd*dt*0.25;
+        o.userData.streakT-=dt;
+        if(o.userData.streakT<=0){
+          o.userData.streakT=0.05;
+          PS.burst(new THREE.Vector3(o.position.x+Math.sign(o.userData.vx)*-1.0,o.position.y,o.position.z),[0xffffff,0xcceeff],1,0.5,0.5);
+        }
+        if(Math.abs(o.position.x)>18){scene.remove(o);disposeObj(o);obs.splice(i,1);continue;}
+      }
+      // Ink cloud: blinds, no damage, cloud dissipates on contact
+      if(o.userData.kind==='inkCloud' && dist3(player.position,o.position)<1.4){
+        S.inkedT=1.5;
+        SFX.inkHit();
+        PS.burst(o.position.clone(),[0x0a0a14,0x202030,0x101020],16,4,2);
+        scene.remove(o); disposeObj(o); obs.splice(i,1); continue;
       }
       if(!o.userData.warned&&o.position.z>-14&&o.userData.kind!=='barrier'){
         o.userData.warned=true;
@@ -1799,12 +2509,32 @@ function loop(now){
       if(o.userData.kind==='barrier'){
         if(Math.abs(player.position.z-o.position.z)<1.8){
           const playerLane=C.lanes.reduce((best,lx,li)=>Math.abs(player.position.x-lx)<Math.abs(player.position.x-C.lanes[best])?li:best,0);
-          if(playerLane!==o.userData.safeLane&&!S.invincible){if(takeDamage())return;}
+          if(playerLane!==o.userData.safeLane&&!S.invincible&&S.dashT<=0){
+            if(S.decoy){ S.decoy=false; decoyFish.visible=false; S.invincible=true; S.invincibleT=0.8; flash('#40e0ff',150); SFX.hit(); }
+            else if(takeDamage())return;
+          }
           if(S.dead)return;
         }
-      } else if(o.userData.kind==='sweeper'
+      } else if(o.userData.kind==='inkCloud' ? false
+          : o.userData.kind==='sweeper'
           ? (Math.abs(player.position.z-o.position.z)<0.85 && player.position.y-player.userData.baseY<1.15 && Math.abs(player.position.x-o.position.x)<1.9)
-          : dist3(player.position,o.position)<C.hitRadius){
+          : o.userData.kind==='stalactite'
+          ? (o.userData.state!=='hang' && Math.abs(player.position.z-o.position.z)<0.8 && Math.abs(player.position.x-o.position.x)<0.9 && o.userData.spike.position.y-player.position.y<2.0)
+          : o.userData.kind==='crabClaw'
+          ? (o.userData.cycle>=1.45 && Math.abs(player.position.z-o.position.z)<0.7 && Math.abs(player.position.x-o.position.x)<1.3 && player.position.y-player.userData.baseY<1.3)
+          : o.userData.kind==='eelZap'
+          ? (o.userData.state==='zapping' && Math.abs(player.position.z-o.position.z)<0.8 && Math.abs(player.position.x-o.position.x)<1.2)
+          : o.userData.kind==='torpedo'
+          ? (Math.abs(player.position.z-o.position.z)<0.9 && Math.abs(player.position.x-o.position.x)<1.1 && Math.abs(player.position.y-o.position.y)<0.9)
+          : dist3(player.position,o.position)<hitR()){
+        if(S.decoy&&!S.invincible&&S.dashT<=0){
+          S.decoy=false; decoyFish.visible=false;
+          S.invincible=true; S.invincibleT=0.8;
+          flash('#40e0ff',150); SFX.hit();
+          PS.burst(decoyFish.position.clone(),[0x40e0ff,0x80f0ff,0xffffff],16,5,4);
+          showPop('DECOY SAVED YOU!',innerWidth/2,innerHeight*0.4,'#80f0ff');
+          scene.remove(o); disposeObj(o); obs.splice(i,1); continue;
+        }
         if(S.shieldActive){
           // Shield absorbs hit
           S.shieldActive=false; player.userData.aura.visible=false; $shb.classList.remove('show');
@@ -1813,7 +2543,7 @@ function loop(now){
           PS.burst(o.position.clone(),[0x00ddff,0x88ffff,0xffffff],12,4,3);
           scene.remove(o); disposeObj(o); obs.splice(i,1); continue;
         }
-        if(!S.invincible){ if(takeDamage()) return; }
+        if(!S.invincible&&S.dashT<=0){ if(takeDamage()) return; }
         if(S.dead) return;
       }
       // Near-miss: obstacle just passed within a whisker — reward the dodge
@@ -1844,7 +2574,7 @@ function loop(now){
       const collectRad=S.shieldActive?C.collectRadius*2.5:C.collectRadius;
       const attractRange=magnetOn?collectRad*7:collectRad*3;
       const d3=dist3(player.position,c.position);
-      const isPowerup=c.userData.kind==='shield'||c.userData.kind==='magnet'||c.userData.kind==='x2';
+      const isPowerup=['shield','magnet','x2','dash','timeSlow','decoy','shrink'].includes(c.userData.kind);
       if(!c.userData.got && d3<attractRange && !isPowerup){
         // attract
         const pull=Math.max(0,1-d3/attractRange)*(magnetOn?0.4:0.25);
@@ -1860,7 +2590,7 @@ function loop(now){
         const screenX=innerWidth/2, screenY=innerHeight/2;
         if(c.userData.kind==='pearl'){
           S.pearls++;
-          let pts=25*mult; if(S.x2)pts*=2; S.score+=pts;
+          let pts=25*mult; if(S.shrinkT>0)pts+=5; if(S.x2)pts*=2; S.score+=pts;
           SFX.collect(mult);
           PS.burst(c.position.clone(),[0xffffff,0xddeeff,0xb8b8ff,0xaaccff],12,4,4);
           showPop('+'+pts,screenX,screenY,'#d8eeff');
@@ -1883,6 +2613,32 @@ function loop(now){
           SFX.powerup();
           PS.burst(c.position.clone(),[0xffe060,0xffaa00,0xffffff],12,4,4);
           showPop('2X SCORE!',screenX,screenY,'#ffe060');
+        } else if(c.userData.kind==='dash'){
+          S.dashT=0.9;
+          $db.classList.add('show');
+          SFX.dash();
+          flash('#ffa030',120);
+          PS.burst(c.position.clone(),[0xffa030,0xffd060,0xffffff],14,5,4);
+          showPop('DASH!',screenX,screenY,'#ffa030');
+        } else if(c.userData.kind==='timeSlow'){
+          S.timeSlowT=3;
+          $slb.classList.add('show');
+          SFX.timeSlow();
+          flash('#b070ff',150);
+          PS.burst(c.position.clone(),[0xb070ff,0xd0a0ff,0xffffff],14,4,4);
+          showPop('SLOW-MO!',screenX,screenY,'#c898ff');
+        } else if(c.userData.kind==='decoy'){
+          S.decoy=true; decoyFish.visible=true;
+          SFX.powerup();
+          PS.burst(c.position.clone(),[0x40e0ff,0x80f0ff,0xffffff],12,4,4);
+          showPop('DECOY!',screenX,screenY,'#80f0ff');
+        } else if(c.userData.kind==='shrink'){
+          S.shrinkT=5;
+          $tb.classList.add('show');
+          SFX.shrink();
+          flash('#ff70b8',120);
+          PS.burst(c.position.clone(),[0xff70b8,0xff98d0,0xffffff],12,4,4);
+          showPop('TINY!',screenX,screenY,'#ff98d0');
         } else if(c.userData.kind==='shield'){
           S.shieldActive=true; S.shieldT=8;
           player.userData.aura.visible=true;
@@ -1899,13 +2655,13 @@ function loop(now){
     }
 
     // Trail
-    if(S.boost){
+    if(S.boost||S.dashT>0){
       trail.forEach((tr,i)=>{
         tr.userData.tgtOp=0.72-i*0.028;
         tr.position.set(player.position.x+Math.sin(t*12+i*0.35)*0.12,player.position.y+Math.cos(t*12+i*0.35)*0.12,player.position.z+0.5+i*0.32);
       });
     }
-    trail.forEach(tr=>{const tgt=S.boost?tr.userData.tgtOp:0;tr.material.opacity+=(tgt-tr.material.opacity)*0.12;});
+    trail.forEach(tr=>{const tgt=(S.boost||S.dashT>0)?tr.userData.tgtOp:0;tr.material.opacity+=(tgt-tr.material.opacity)*0.12;});
 
     PS.update(dt);
     updateHUD();
@@ -1928,8 +2684,23 @@ function loop(now){
   // ─── AMBIENT (always) ───
   // Ease the world bend toward its target (returns to straight outside runs)
   const curveOn=S.on&&!S.paused;
-  CURVE.x.value+=((curveOn?S.curveTgtX:0)-CURVE.x.value)*0.012;
-  CURVE.y.value+=((curveOn?S.curveTgtY:0)-CURVE.y.value)*0.012;
+  CURVE.x.value+=((curveOn?S.curveTgtX:0)-CURVE.x.value)*0.026;
+  CURVE.y.value+=((curveOn?S.curveTgtY:0)-CURVE.y.value)*0.026;
+  // Film grain jitter
+  if(((now/50)|0)%2===0) grainDiv.style.backgroundPosition=((Math.random()*128)|0)+'px '+((Math.random()*128)|0)+'px';
+  // Water surface undulation (brightness follows the biome sun)
+  waterSurf.material.uniforms.uTime.value=t;
+  waterSurf.material.uniforms.uBright.value=0.15+sunL.intensity*0.3;
+  // Marine snow drift
+  {
+    const sp=snow.pos;
+    for(let i=0;i<snow.N;i++){
+      sp[i*3+1]-=snow.spd[i]*dt*0.9;
+      sp[i*3]+=Math.sin(t*0.5+i*1.7)*0.004;
+      if(sp[i*3+1]<-6){ sp[i*3+1]=27; sp[i*3]=(Math.random()-0.5)*60; }
+    }
+    snow.attr.needsUpdate=true;
+  }
   // Sand cascades pour continuously (one shared texture scroll)
   sandfallTex.offset.y-=dt*0.55;
   // Underwater lens shader time
@@ -1968,13 +2739,15 @@ function loop(now){
     }
   }
 
-  // Camera
+  // Camera (with subtle cinematic drift)
   cam.position.x+=(player.position.x*0.22-cam.position.x)*0.07;
   cam.position.y=5.5+(player.position.y-2)*0.38;
+  cam.position.x+=Math.sin(t*0.31)*0.08;
+  cam.position.y+=Math.sin(t*0.23)*0.05;
   if(S.shakeT>0){S.shakeT-=dt;const amp=S.shakeAmp*(S.shakeT/0.5);cam.position.x+=(Math.random()-0.5)*amp;cam.position.y+=(Math.random()-0.5)*amp*0.6;}
   if(S.boost){cam.position.x+=(Math.random()-0.5)*0.04;cam.position.y+=(Math.random()-0.5)*0.025;}
   // Bank the camera into lane changes for a swooping feel
-  const bankTgt=S.on?(player.position.x-C.lanes[S.tgtLane])*0.045:0;
+  const bankTgt=S.on?((player.position.x-C.lanes[S.tgtLane])*0.045-CURVE.x.value*0.016):0;
   cam.rotation.z+=(bankTgt-cam.rotation.z)*0.1;
 
   if(composer) composer.render(); else ren.render(scene,cam);
